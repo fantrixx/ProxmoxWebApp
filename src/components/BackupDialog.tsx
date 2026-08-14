@@ -33,7 +33,7 @@ export function BackupDialog({
   vmid: number | string;
   name?: string;
 }) {
-  const { toast, trackJob } = useApp();
+  const { toast, trackJob, attachJobUpid, dismissJob } = useApp();
   const qc = useQueryClient();
   const vmidStr = String(vmid);
   const [storage, setStorage] = useState("");
@@ -103,23 +103,34 @@ export function BackupDialog({
         mode,
         compress,
       }),
-    onSuccess: (res) => {
+    onMutate: () => {
       const label = name || `Guest ${vmid}`;
-      if (res.upid) {
-        trackJob({
-          kind: "backup",
-          title: `Backup · ${label}`,
-          detail: `${type === "lxc" ? "CT" : "VM"} ${vmid} → ${selectedStorage} · ${node}`,
-          node,
-          upid: res.upid,
-        });
+      const jobId = trackJob({
+        kind: "backup",
+        title: `Backup · ${label}`,
+        detail: `${type === "lxc" ? "CT" : "VM"} ${vmid} → ${selectedStorage} · ${node}`,
+        node,
+        upid: "",
+      });
+      onClose();
+      return { jobId };
+    },
+    onSuccess: (res, _vars, ctx) => {
+      if (res.upid && ctx?.jobId) {
+        attachJobUpid(ctx.jobId, res.upid);
+      } else if (ctx?.jobId) {
+        dismissJob(ctx.jobId);
+        toast("err", "Backup started but no task id was returned.");
+        return;
       }
       toast("ok", "Backup started.");
       void qc.invalidateQueries({ queryKey: ["guestBackups", node, type, vmidStr] });
       void qc.invalidateQueries({ queryKey: ["tasks"] });
-      onClose();
     },
-    onError: (err: Error) => toast("err", err.message),
+    onError: (err: Error, _vars, ctx) => {
+      if (ctx?.jobId) dismissJob(ctx.jobId);
+      toast("err", err.message);
+    },
   });
 
   if (!open) return null;

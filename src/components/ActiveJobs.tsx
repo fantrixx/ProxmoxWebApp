@@ -46,6 +46,7 @@ function useJobSnapshot(job: ActiveJob): JobSnapshot & { dismiss: () => void } {
   const { dismissJob } = useApp();
   const qc = useQueryClient();
   const node = nodeFromUpid(job.upid, job.node);
+  const pending = !job.upid;
   const [now, setNow] = useState(Date.now());
   const [doneAt, setDoneAt] = useState<number | null>(null);
 
@@ -57,30 +58,38 @@ function useJobSnapshot(job: ActiveJob): JobSnapshot & { dismiss: () => void } {
   const statusQ = useQuery({
     queryKey: ["jobStatus", node, job.upid],
     queryFn: () => dataApi.taskStatus(node, job.upid),
+    enabled: !pending,
     refetchInterval: (q) => {
       const status = String(q.state.data?.status || "").toLowerCase();
       return status === "stopped" ? false : 2000;
     },
   });
 
-  const status = String(
-    statusQ.data?.status || (statusQ.isError ? "stopped" : "running"),
-  ).toLowerCase();
-  const running = status !== "stopped";
+  const status = pending
+    ? "running"
+    : String(statusQ.data?.status || (statusQ.isError ? "stopped" : "running")).toLowerCase();
+  const running = pending || status !== "stopped";
   const exitstatus = String(statusQ.data?.exitstatus || "");
   const failed =
-    statusQ.isError ||
-    (!running && exitstatus.length > 0 && !/^ok$/i.test(exitstatus));
-  const ok = !running && !failed;
+    !pending &&
+    (statusQ.isError ||
+      (!running && exitstatus.length > 0 && !/^ok$/i.test(exitstatus)));
+  const ok = !pending && !running && !failed;
 
   const logQ = useQuery({
     queryKey: ["jobLog", node, job.upid],
     queryFn: () => dataApi.taskLog(node, job.upid),
-    enabled: running || failed,
-    refetchInterval: running ? 2500 : false,
+    enabled: !pending && (running || failed),
+    refetchInterval: !pending && running ? 2500 : false,
   });
 
-  const progress = running ? parseProgressFromLog(logQ.data?.log || []) : failed ? null : 100;
+  const progress = pending
+    ? null
+    : running
+      ? parseProgressFromLog(logQ.data?.log || [])
+      : failed
+        ? null
+        : 100;
   const elapsedSec = Math.max(0, ((doneAt ?? now) - job.startedAt) / 1000);
   const etaSec =
     running && progress != null && progress >= 5 && progress < 100
@@ -88,22 +97,21 @@ function useJobSnapshot(job: ActiveJob): JobSnapshot & { dismiss: () => void } {
       : null;
 
   useEffect(() => {
-    if (!running && doneAt == null) {
-      setDoneAt(Date.now());
-      void qc.invalidateQueries({ queryKey: ["tasks"] });
-      void qc.invalidateQueries({ queryKey: ["guestBackups"] });
-    }
-  }, [running, doneAt, qc]);
+    if (pending || running || doneAt != null) return;
+    setDoneAt(Date.now());
+    void qc.invalidateQueries({ queryKey: ["tasks"] });
+    void qc.invalidateQueries({ queryKey: ["guestBackups"] });
+  }, [pending, running, doneAt, qc]);
 
   useEffect(() => {
-    if (running || failed) return;
+    if (pending || running || failed) return;
     const id = window.setTimeout(() => dismissJob(job.id), 10000);
     return () => window.clearTimeout(id);
-  }, [running, failed, dismissJob, job.id]);
+  }, [pending, running, failed, dismissJob, job.id]);
 
-  const latestLog = [...(logQ.data?.log || [])]
-    .reverse()
-    .find((line) => (line.t || "").trim())?.t;
+  const latestLog = pending
+    ? "Starting…"
+    : [...(logQ.data?.log || [])].reverse().find((line) => (line.t || "").trim())?.t;
 
   return {
     running,
@@ -201,7 +209,9 @@ function JobRow({
                 {snapshot.running
                   ? snapshot.progress != null
                     ? `${Math.round(snapshot.progress)}% · ${formatDuration(snapshot.elapsedSec)}`
-                    : `In progress · ${formatDuration(snapshot.elapsedSec)}`
+                    : job.upid
+                      ? `In progress · ${formatDuration(snapshot.elapsedSec)}`
+                      : `Starting… · ${formatDuration(snapshot.elapsedSec)}`
                   : snapshot.failed
                     ? `Failed after ${formatDuration(snapshot.elapsedSec)}${
                         snapshot.exitstatus ? ` · ${snapshot.exitstatus}` : ""

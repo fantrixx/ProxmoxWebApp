@@ -28,7 +28,7 @@ export function BackupPanel({
   vmid: string;
   name?: string;
 }) {
-  const { toast, trackJob } = useApp();
+  const { toast, trackJob, attachJobUpid, dismissJob } = useApp();
   const qc = useQueryClient();
   const [storage, setStorage] = useState("");
   const [mode, setMode] = useState<"snapshot" | "suspend" | "stop">("snapshot");
@@ -68,21 +68,32 @@ export function BackupPanel({
         mode,
         compress,
       }),
-    onSuccess: (res) => {
+    onMutate: () => {
       const label = name || `Guest ${vmid}`;
-      if (res.upid) {
-        trackJob({
-          kind: "backup",
-          title: `Backup · ${label}`,
-          detail: `${type === "lxc" ? "CT" : "VM"} ${vmid} → ${selectedStorage} · ${node}`,
-          node,
-          upid: res.upid,
-        });
+      const jobId = trackJob({
+        kind: "backup",
+        title: `Backup · ${label}`,
+        detail: `${type === "lxc" ? "CT" : "VM"} ${vmid} → ${selectedStorage} · ${node}`,
+        node,
+        upid: "",
+      });
+      return { jobId };
+    },
+    onSuccess: (res, _vars, ctx) => {
+      if (res.upid && ctx?.jobId) {
+        attachJobUpid(ctx.jobId, res.upid);
+      } else if (ctx?.jobId) {
+        dismissJob(ctx.jobId);
+        toast("err", "Backup started but no task id was returned.");
+        return;
       }
       toast("ok", "Backup started.");
       invalidate();
     },
-    onError: (err: Error) => toast("err", err.message),
+    onError: (err: Error, _vars, ctx) => {
+      if (ctx?.jobId) dismissJob(ctx.jobId);
+      toast("err", err.message);
+    },
   });
 
   const restore = useMutation({
@@ -97,22 +108,33 @@ export function BackupPanel({
         force: restoreForce,
       });
     },
-    onSuccess: (res) => {
+    onMutate: () => {
       const label = name || `Guest ${vmid}`;
-      if (res.upid) {
-        trackJob({
-          kind: "restore",
-          title: `Restore · ${label}`,
-          detail: `${type === "lxc" ? "CT" : "VM"} ${restoreVmid} · ${node}`,
-          node,
-          upid: res.upid,
-        });
+      const jobId = trackJob({
+        kind: "restore",
+        title: `Restore · ${label}`,
+        detail: `${type === "lxc" ? "CT" : "VM"} ${restoreVmid} · ${node}`,
+        node,
+        upid: "",
+      });
+      setRestoreTarget(null);
+      return { jobId };
+    },
+    onSuccess: (res, _vars, ctx) => {
+      if (res.upid && ctx?.jobId) {
+        attachJobUpid(ctx.jobId, res.upid);
+      } else if (ctx?.jobId) {
+        dismissJob(ctx.jobId);
+        toast("err", "Restore started but no task id was returned.");
+        return;
       }
       toast("ok", "Restore started.");
-      setRestoreTarget(null);
       invalidate();
     },
-    onError: (err: Error) => toast("err", err.message),
+    onError: (err: Error, _vars, ctx) => {
+      if (ctx?.jobId) dismissJob(ctx.jobId);
+      toast("err", err.message);
+    },
   });
 
   const remove = useMutation({

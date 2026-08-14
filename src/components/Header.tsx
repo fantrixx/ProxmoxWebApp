@@ -18,7 +18,7 @@ export function Header({ title, subtitle }: { title: string; subtitle?: string }
   }
 
   return (
-    <header className="sticky top-0 z-20 border-b border-line bg-bg/90 backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-line bg-bg/90 backdrop-blur">
       <div className="flex items-center justify-between gap-3 px-4 py-3 md:gap-4 md:px-8 md:py-5">
         <div className="min-w-0">
           <h1 className="truncate text-lg font-semibold tracking-tight md:text-xl">{title}</h1>

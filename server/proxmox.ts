@@ -184,9 +184,11 @@ export async function waitForTask(
 
 export function unwrapUpid(raw: unknown): string | null {
   if (typeof raw === "string" && raw.length > 0) return raw;
-  if (raw && typeof raw === "object" && "upid" in raw) {
-    const upid = (raw as { upid?: string }).upid;
-    return upid || null;
+  if (typeof raw === "number") return String(raw);
+  if (raw && typeof raw === "object") {
+    const obj = raw as { upid?: unknown; data?: unknown };
+    if (typeof obj.upid === "string" && obj.upid.length > 0) return obj.upid;
+    if (obj.data !== undefined) return unwrapUpid(obj.data);
   }
   return null;
 }

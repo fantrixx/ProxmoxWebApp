@@ -20,6 +20,7 @@ export type ActiveJob = {
   title: string;
   detail: string;
   node: string;
+  /** Empty while the Proxmox task id is not known yet. */
   upid: string;
   startedAt: number;
 };
@@ -32,6 +33,7 @@ type AppContextValue = {
   dismissToast: (id: string) => void;
   jobs: ActiveJob[];
   trackJob: (job: Omit<ActiveJob, "id" | "startedAt">) => string;
+  attachJobUpid: (id: string, upid: string) => void;
   dismissJob: (id: string) => void;
 };
 
@@ -115,11 +117,17 @@ export function AppProvider({
 
   const trackJob = useCallback((job: Omit<ActiveJob, "id" | "startedAt">) => {
     const id = crypto.randomUUID();
-    setJobs((prev) => [
-      ...prev.filter((j) => j.upid !== job.upid),
-      { ...job, id, startedAt: Date.now() },
-    ]);
+    setJobs((prev) => {
+      const rest = job.upid ? prev.filter((j) => j.upid !== job.upid) : prev;
+      return [...rest, { ...job, id, startedAt: Date.now() }];
+    });
     return id;
+  }, []);
+
+  const attachJobUpid = useCallback((id: string, upid: string) => {
+    setJobs((prev) =>
+      prev.map((j) => (j.id === id ? { ...j, upid } : j)),
+    );
   }, []);
 
   const dismissJob = useCallback((id: string) => {
@@ -135,9 +143,10 @@ export function AppProvider({
       dismissToast,
       jobs,
       trackJob,
+      attachJobUpid,
       dismissJob,
     }),
-    [user, toasts, toast, dismissToast, jobs, trackJob, dismissJob],
+    [user, toasts, toast, dismissToast, jobs, trackJob, attachJobUpid, dismissJob],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
