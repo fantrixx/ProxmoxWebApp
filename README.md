@@ -16,7 +16,27 @@ Danach: `http://<CT-IP>:3000` — anmelden mit dem Proxmox-Benutzer (z. B. `root
 
 Ohne Rückfragen: `DEFAULTS=yes bash -c "$(wget -qLO - https://raw.githubusercontent.com/fantrixx/ProxmoxWebApp/main/ct/proxpanel.sh)"`
 
-Update im laufenden Container: dasselbe Script **im CT** ausführen (`pct enter <CTID>`).
+## Update
+
+Holt den aktuellen Stand von GitHub, baut die App und startet den Dienst neu (`.env` bleibt erhalten).
+
+**Im Container** (nach `pct enter <CTID>` oder SSH):
+
+```bash
+proxpanel-update
+```
+
+Falls der Befehl noch fehlt (ältere Installation), einmalig dasselbe Script **im CT** ausführen:
+
+```bash
+bash -c "$(wget -qLO - https://raw.githubusercontent.com/fantrixx/ProxmoxWebApp/main/ct/proxpanel.sh)"
+```
+
+**Auf dem Proxmox-Host** (findet den ProxPanel-LXC selbst):
+
+```bash
+UPDATE=1 bash -c "$(wget -qLO - https://raw.githubusercontent.com/fantrixx/ProxmoxWebApp/main/ct/proxpanel.sh)"
+```
 
 ## Funktionen
 

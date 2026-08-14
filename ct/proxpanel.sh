@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 # ProxPanel — Proxmox VE Helper Script
 #
-# Einzeiler auf dem Proxmox-Host (als root):
+# Neuinstallation auf dem Proxmox-Host (als root):
 #
 #   bash -c "$(wget -qLO - https://raw.githubusercontent.com/fantrixx/ProxmoxWebApp/main/ct/proxpanel.sh)"
+#
+# Update (Code von GitHub holen, bauen, Dienst neu starten):
+#
+#   Im Container:     proxpanel-update
+#   Auf dem Host:     UPDATE=1 bash -c "$(wget -qLO - https://raw.githubusercontent.com/fantrixx/ProxmoxWebApp/main/ct/proxpanel.sh)"
 #
 # Das Script legt einen LXC an und klont die App von GitHub:
 #   https://github.com/fantrixx/ProxmoxWebApp
@@ -54,9 +59,29 @@ trap 'msg_error "Abbruch in Zeile $LINENO"; exit 1' ERR
 
 need_root() {
   if [[ "$(id -u)" -ne 0 ]]; then
-    msg_error "Bitte als root auf dem Proxmox-Host ausführen."
+    msg_error "Bitte als root ausführen."
     exit 1
   fi
+}
+
+wants_update() {
+  local arg
+  [[ "${UPDATE:-}" == "1" || "${UPDATE:-}" == "yes" ]] && return 0
+  for arg in "$@"; do
+    case "$arg" in
+      --update | update | -u) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+install_update_command() {
+  cat > /usr/local/bin/proxpanel-update <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exec bash /opt/proxpanel/ct/proxpanel.sh --update
+EOF
+  chmod 755 /usr/local/bin/proxpanel-update
 }
 
 is_pve_host() { command -v pveversion >/dev/null 2>&1 && command -v pct >/dev/null 2>&1; }
@@ -225,11 +250,18 @@ User=root
 WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
-systemctl enable --now proxpanel"
+systemctl enable --now proxpanel
+cat > /usr/local/bin/proxpanel-update <<'UPEOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exec bash /opt/proxpanel/ct/proxpanel.sh --update
+UPEOF
+chmod 755 /usr/local/bin/proxpanel-update"
 
   pct exec "$ctid" -- bash -lc "cat > /etc/motd <<EOF
 
 ProxPanel  →  http://\$(hostname -I | awk '{print \$1}'):${APP_PORT}
+Update:     proxpanel-update
 Dienst:     systemctl status proxpanel
 Logs:       journalctl -u proxpanel -f
 Quelle:     ${APP_DIR}
@@ -238,24 +270,88 @@ EOF"
   msg_ok "Dienst proxpanel ist aktiv"
 }
 
+find_proxpanel_cts() {
+  local id status name
+  while read -r id status name; do
+    [[ -z "$id" ]] && continue
+    if [[ "$status" == "running" ]] && pct exec "$id" -- test -d "$APP_DIR" 2>/dev/null; then
+      echo "$id"
+      continue
+    fi
+    if pct config "$id" 2>/dev/null | grep -qE '^hostname:[[:space:]]*proxpanel'; then
+      echo "$id"
+    fi
+  done < <(pct list | awk 'NR>1 {print $1, $2, $NF}')
+}
+
 update_inside_ct() {
   header_info
+  need_root
   if [[ ! -d "$APP_DIR" ]]; then
     msg_error "Keine ProxPanel-Installation unter ${APP_DIR} gefunden."
     exit 1
   fi
-  msg_info "Aktualisiere ProxPanel …"
+
+  local branch="${REPO_BRANCH:-main}"
+  msg_info "Hole aktuellen Stand von GitHub (${branch}) …"
   cd "$APP_DIR"
   if [[ -d .git ]]; then
-    git pull --ff-only origin "${REPO_BRANCH:-main}"
+    git remote set-url origin "$REPO_URL" >/dev/null 2>&1 || true
+    git fetch --depth 1 origin "$branch"
+    git checkout -B "$branch" "origin/$branch"
+    git reset --hard "origin/$branch"
+    msg_ok "Stand: $(git log -1 --pretty=format:'%h %s')"
   else
-    msg_warn "Kein Git-Repo — nur npm-Build. Für Code-Updates Script vom Host erneut ausführen."
+    msg_warn "Kein Git-Repo — nur npm-Build. Für Code-Updates das Helper-Script vom Host mit UPDATE=1 ausführen."
   fi
+
+  msg_info "Installiere Abhängigkeiten und baue die App …"
   npm install
   npm run build
+  msg_ok "Build fertig"
+
+  install_update_command
+  systemctl daemon-reload
   systemctl restart proxpanel
-  msg_ok "Update fertig. http://$(hostname -I | awk '{print $1}'):${APP_PORT}"
+  sleep 1
+  if systemctl is-active --quiet proxpanel; then
+    msg_ok "Update fertig. http://$(hostname -I | awk '{print $1}'):${APP_PORT}"
+    echo
+    echo -e "${TAB}${INFO}  Nächstes Update: ${GN}proxpanel-update${CL}"
+  else
+    msg_error "Dienst proxpanel ist nicht aktiv. Logs: journalctl -u proxpanel -e"
+    exit 1
+  fi
   exit 0
+}
+
+update_from_pve_host() {
+  header_info
+  need_root
+
+  local cts=()
+  mapfile -t cts < <(find_proxpanel_cts | awk 'NF && !seen[$0]++')
+  if [[ ${#cts[@]} -eq 0 ]]; then
+    msg_error "Kein ProxPanel-Container gefunden (Ordner ${APP_DIR} oder Hostname proxpanel)."
+    exit 1
+  fi
+
+  local ctid="${cts[0]}"
+  if [[ ${#cts[@]} -gt 1 ]]; then
+    ctid="$(select_from_list "Update" "Welchen ProxPanel-Container aktualisieren?" "${cts[@]}")"
+  fi
+
+  local status
+  status="$(pct status "$ctid" 2>/dev/null | awk '{print $2}')"
+  if [[ "$status" != "running" ]]; then
+    msg_info "Starte Container ${ctid} …"
+    pct start "$ctid"
+    sleep 3
+  fi
+  msg_ok "Aktualisiere Container ${ctid}"
+
+  local script_url="https://raw.githubusercontent.com/${GITHUB_REPO}/${REPO_BRANCH}/ct/proxpanel.sh"
+  pct exec "$ctid" -- bash -lc "wget -qO /tmp/proxpanel.sh '${script_url}' && bash /tmp/proxpanel.sh --update && rm -f /tmp/proxpanel.sh"
 }
 
 create_container() {
@@ -390,10 +486,18 @@ create_container() {
     echo -e "${TAB}${INFO}  root-Passwort:${GN} ${PW}${CL}"
   fi
   echo -e "${TAB}${INFO}  Im Browser anmelden mit deinem Proxmox-Benutzer (z. B. root@pam)."
+  echo -e "${TAB}${INFO}  Update im CT:  ${GN}proxpanel-update${CL}"
+  echo -e "${TAB}${INFO}  Update am Host:${GN} UPDATE=1 bash -c \"\$(wget -qLO - https://raw.githubusercontent.com/${GITHUB_REPO}/main/ct/proxpanel.sh)\"${CL}"
   echo
 }
 
-if is_pve_host; then
+if wants_update "$@"; then
+  if is_pve_host; then
+    update_from_pve_host
+  else
+    update_inside_ct
+  fi
+elif is_pve_host; then
   create_container
 else
   update_inside_ct
