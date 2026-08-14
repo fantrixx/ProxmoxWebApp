@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useContext, useMemo, useState, createContext, type ReactNode } from "react";
 import type { AuthUser, GuestType } from "./types";
 
 export type ConsoleTarget = {
@@ -16,15 +16,32 @@ export type Toast = {
 
 type AppContextValue = {
   user: AuthUser;
-  consoleTarget: ConsoleTarget | null;
   openConsole: (t: ConsoleTarget) => void;
-  closeConsole: () => void;
   toasts: Toast[];
   toast: (kind: Toast["kind"], text: string) => void;
   dismissToast: (id: string) => void;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
+
+function consoleUrl(t: ConsoleTarget): string {
+  const qs = new URLSearchParams({ name: t.name });
+  return `/console/${encodeURIComponent(t.type)}/${encodeURIComponent(t.node)}/${t.vmid}?${qs}`;
+}
+
+/** Open shell in a detached popup (falls back to a new tab if blocked). */
+export function openDetachedConsole(t: ConsoleTarget) {
+  const url = consoleUrl(t);
+  const name = `proxpanel-shell-${t.type}-${t.node}-${t.vmid}`;
+  const features =
+    "popup=yes,width=1100,height=720,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=no";
+  const win = window.open(url, name, features);
+  if (!win) {
+    window.open(url, "_blank", "noopener,noreferrer");
+  } else {
+    win.focus();
+  }
+}
 
 export function AppProvider({
   user,
@@ -33,7 +50,6 @@ export function AppProvider({
   user: AuthUser;
   children: ReactNode;
 }) {
-  const [consoleTarget, setConsoleTarget] = useState<ConsoleTarget | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const toast = useCallback((kind: Toast["kind"], text: string) => {
@@ -51,14 +67,12 @@ export function AppProvider({
   const value = useMemo(
     () => ({
       user,
-      consoleTarget,
-      openConsole: setConsoleTarget,
-      closeConsole: () => setConsoleTarget(null),
+      openConsole: openDetachedConsole,
       toasts,
       toast,
       dismissToast,
     }),
-    [user, consoleTarget, toasts, toast, dismissToast],
+    [user, toasts, toast, dismissToast],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

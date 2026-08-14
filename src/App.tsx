@@ -8,6 +8,7 @@ import Dashboard from "./pages/Dashboard";
 import GuestList from "./pages/GuestList";
 import GuestDetail from "./pages/GuestDetail";
 import StoragePage from "./pages/Storage";
+import ConsolePage from "./pages/ConsolePage";
 
 function Protected() {
   const me = useQuery({
@@ -40,6 +41,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route element={<Protected />}>
+        <Route path="console/:type/:node/:vmid" element={<ConsolePage />} />
         <Route element={<AppShell />}>
           <Route index element={<Dashboard />} />
           <Route path="containers" element={<GuestList kind="lxc" />} />

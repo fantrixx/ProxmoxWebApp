@@ -1,10 +1,10 @@
 import { useEffect, useRef } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { X } from "lucide-react";
 import "@xterm/xterm/css/xterm.css";
-import { useApp } from "../context";
 
 const textEncoder = new TextEncoder();
 
@@ -19,13 +19,29 @@ function encodeResize(cols: number, rows: number): string {
   return `1:${cols}:${rows}:`;
 }
 
-export function TerminalModal() {
-  const { consoleTarget, closeConsole } = useApp();
+export default function ConsolePage() {
+  const { type, node, vmid } = useParams();
+  const [search] = useSearchParams();
+  const navigate = useNavigate();
   const wrapRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
 
+  const name = search.get("name") || vmid || "guest";
+  const guestType = type === "qemu" ? "qemu" : "lxc";
+  const kind = guestType === "lxc" ? "CT" : "VM";
+
+  function closeWindow() {
+    if (window.opener && !window.opener.closed) {
+      window.close();
+      return;
+    }
+    navigate(-1);
+  }
+
   useEffect(() => {
-    if (!consoleTarget || !wrapRef.current) return;
+    if (!node || !vmid || !wrapRef.current) return;
+
+    document.title = `Shell · ${kind} ${vmid} · ${name} — ProxPanel`;
 
     const isMobile = window.matchMedia("(max-width: 640px)").matches;
     const term = new Terminal({
@@ -49,9 +65,9 @@ export function TerminalModal() {
 
     const proto = location.protocol === "https:" ? "wss" : "ws";
     const qs = new URLSearchParams({
-      type: consoleTarget.type,
-      node: consoleTarget.node,
-      vmid: String(consoleTarget.vmid),
+      type: guestType,
+      node,
+      vmid: String(vmid),
     });
     const ws = new WebSocket(`${proto}://${location.host}/ws/console?${qs}`);
     ws.binaryType = "arraybuffer";
@@ -68,7 +84,6 @@ export function TerminalModal() {
     ws.onopen = () => {
       term.writeln("\x1b[90mConnecting to Proxmox console…\x1b[0m");
       sendResize();
-      // termproxy idle timeout ~5 min — keep alive with protocol ping "2"
       keepalive = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) ws.send("2");
       }, 30_000);
@@ -93,11 +108,6 @@ export function TerminalModal() {
     const onResize = () => sendResize();
     window.addEventListener("resize", onResize);
 
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeConsole();
-    };
-    window.addEventListener("keydown", onKey);
-
     const wrapEl = wrapRef.current;
     const onPointer = () => term.focus();
     wrapEl.addEventListener("pointerdown", onPointer);
@@ -106,44 +116,45 @@ export function TerminalModal() {
       onData.dispose();
       if (keepalive) clearInterval(keepalive);
       window.removeEventListener("resize", onResize);
-      window.removeEventListener("keydown", onKey);
       wrapEl.removeEventListener("pointerdown", onPointer);
       ws.close();
       term.dispose();
       termRef.current = null;
+      document.title = "ProxPanel — Proxmox Administration";
     };
-  }, [consoleTarget, closeConsole]);
+  }, [guestType, kind, name, node, vmid]);
 
-  if (!consoleTarget) return null;
-
-  const kind = consoleTarget.type === "lxc" ? "CT" : "VM";
+  if (!node || !vmid) {
+    return (
+      <div className="grid min-h-dvh place-items-center bg-bg text-muted">
+        Invalid console target.
+      </div>
+    );
+  }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/80 p-0 md:items-center md:p-6">
-      <div className="flex h-full w-full flex-col overflow-hidden border-line bg-bg shadow-2xl md:h-[min(860px,92vh)] md:w-[min(1100px,96vw)] md:rounded-2xl md:border">
-        <div className="flex items-center justify-between gap-3 border-b border-line px-3 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:px-4">
-          <div className="min-w-0">
-            <div className="truncate text-sm font-medium">
-              Shell · {kind} {consoleTarget.vmid} · {consoleTarget.name}
-            </div>
-            <div className="hidden text-[11px] text-muted sm:block">
-              Node {consoleTarget.node} · Esc to close
-            </div>
+    <div className="flex h-dvh flex-col overflow-hidden bg-bg">
+      <div className="flex items-center justify-between gap-3 border-b border-line px-3 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:px-4">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-medium">
+            Shell · {kind} {vmid} · {name}
           </div>
-          <button
-            type="button"
-            onClick={closeConsole}
-            className="min-h-11 min-w-11 shrink-0 rounded-lg p-2 text-muted hover:bg-surface hover:text-ink"
-          >
-            <X className="size-4" />
-          </button>
+          <div className="text-[11px] text-muted">Node {node} · detached window</div>
         </div>
-        <div
-          ref={wrapRef}
-          className="min-h-0 flex-1 cursor-text bg-bg p-2"
-          onClick={() => termRef.current?.focus()}
-        />
+        <button
+          type="button"
+          onClick={closeWindow}
+          className="min-h-11 min-w-11 shrink-0 rounded-lg p-2 text-muted hover:bg-surface hover:text-ink"
+          title="Close"
+        >
+          <X className="size-4" />
+        </button>
       </div>
+      <div
+        ref={wrapRef}
+        className="min-h-0 flex-1 cursor-text bg-bg p-2"
+        onClick={() => termRef.current?.focus()}
+      />
     </div>
   );
 }
