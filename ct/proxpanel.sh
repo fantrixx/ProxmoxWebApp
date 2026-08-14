@@ -118,22 +118,39 @@ pve_host_ip() {
 
 ensure_template() {
   local store="$1"
-  msg_info "Suche Debian-12-Template auf Storage \"${store}\" …"
+  local arch="amd64"
+  case "$(dpkg --print-architecture 2>/dev/null || true)" in
+    arm64 | aarch64) arch="arm64" ;;
+  esac
+  case "$(uname -m)" in
+    aarch64 | arm64) arch="arm64" ;;
+  esac
+
+  msg_info "Aktualisiere Proxmox-Template-Katalog …"
   pveam update >/dev/null 2>&1 || true
+
   local tmpl
-  tmpl="$(pveam list "$store" 2>/dev/null | awk '/debian-12-standard/ {print $NF}' | sed 's|.*/||' | sort -V | tail -1)"
-  tmpl="${tmpl//$'\r'/}"
-  tmpl="$(printf '%s' "$tmpl" | awk '{$1=$1; print}')"
+  tmpl="$(pveam available -section system 2>/dev/null \
+    | awk -v arch="$arch" '
+        $2 ~ /^debian-12-standard_/ && $2 ~ ("_" arch "\\.tar\\.(zst|xz|gz)$") { print $2 }
+      ' \
+    | sort -V \
+    | tail -1)"
+
   if [[ -z "$tmpl" ]]; then
-    tmpl="$(pveam available -section system 2>/dev/null | awk '/debian-12-standard.*amd64/ {print $2}' | sort -V | tail -1)"
-    tmpl="${tmpl//$'\r'/}"
-    if [[ -z "$tmpl" ]]; then
-      msg_error "Kein debian-12-standard Template gefunden. Pruefe pveam available."
-      exit 1
-    fi
-    msg_info "Lade Template ${tmpl} …"
-    pveam download "$store" "$tmpl"
+    msg_error "Kein debian-12-standard (${arch}) im Online-Katalog."
+    msg_error "Manuell: pveam update && pveam available -section system | grep debian-12"
+    exit 1
   fi
+
+  if pveam list "$store" 2>/dev/null | grep -qF "$tmpl"; then
+    msg_ok "Template ${tmpl} ist bereits auf ${store}"
+  else
+    msg_info "Lade ${tmpl} von download.proxmox.com nach ${store} …"
+    pveam download "$store" "$tmpl"
+    msg_ok "Template heruntergeladen"
+  fi
+
   printf '%s\n' "$tmpl"
 }
 
