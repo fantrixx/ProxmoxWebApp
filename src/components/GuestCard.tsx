@@ -4,6 +4,7 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   HardDriveDownload,
+  Loader2,
   Play,
   Power,
   RotateCcw,
@@ -26,6 +27,7 @@ import { BackupDialog } from "./BackupDialog";
 import { IpList } from "./IpList";
 import { useApp } from "../context";
 import { useGuestAction } from "../hooks";
+import { useGuestBackupProgress } from "../hooks/useGuestBackupProgress";
 import { POWER_CONFIRMS } from "../power";
 
 type PowerKind = keyof typeof POWER_CONFIRMS;
@@ -44,6 +46,7 @@ export function GuestCard({
   const running = guest.status === "running";
   const type = (guest.type === "qemu" ? "qemu" : "lxc") as GuestType;
   const busy = action.isPending;
+  const backup = useGuestBackupProgress(guest.node, guest.vmid);
 
   function run(kind: string) {
     if (!guest.node || guest.vmid == null) return;
@@ -68,16 +71,56 @@ export function GuestCard({
   }
 
   const meta = confirm ? POWER_CONFIRMS[confirm] : null;
+  const backingUp = Boolean(backup?.running);
+  const backupFailed = Boolean(backup?.failed);
 
   return (
-    <article className="flex flex-col rounded-2xl border border-line bg-surface p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+    <article
+      className={`relative flex flex-col overflow-hidden rounded-2xl border bg-surface p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] ${
+        backupFailed
+          ? "border-bad/50"
+          : backingUp
+            ? "border-accent/50"
+            : "border-line"
+      }`}
+    >
+      {backingUp || backupFailed ? (
+        <div
+          className={`absolute inset-x-0 top-0 h-1 ${
+            backupFailed ? "bg-bad" : "bg-accent/30"
+          }`}
+        >
+          {!backupFailed ? (
+            <div
+              className={`h-full bg-accent transition-[width] duration-500 ${
+                backup?.progress == null ? "w-1/3 animate-pulse" : ""
+              }`}
+              style={
+                backup?.progress != null ? { width: `${backup.progress}%` } : undefined
+              }
+            />
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <div className="mb-1.5 flex items-center gap-2">
+        <div className="min-w-0">
+          <div className="mb-1.5 flex flex-wrap items-center gap-2">
             <StatusBadge status={guest.status} />
             <span className="rounded-md bg-bg px-1.5 py-0.5 font-mono text-[11px] text-muted">
               {guestLabel(type)} {guest.vmid}
             </span>
+            {backingUp ? (
+              <span className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[11px] font-medium text-accent">
+                <Loader2 className="size-3 animate-spin" aria-hidden />
+                Backup {backup?.progress != null ? `${Math.round(backup.progress)}%` : "…"}
+              </span>
+            ) : null}
+            {backupFailed ? (
+              <span className="inline-flex max-w-full items-center gap-1 truncate rounded-md border border-bad/40 bg-bad/10 px-1.5 py-0.5 text-[11px] font-medium text-bad">
+                Backup failed
+              </span>
+            ) : null}
           </div>
           <Link
             to={`/guest/${type}/${guest.node}/${guest.vmid}`}
@@ -95,6 +138,30 @@ export function GuestCard({
           </div>
         </div>
       </div>
+
+      {backingUp ? (
+        <div className="mb-4 rounded-xl border border-accent/30 bg-accent/5 px-3 py-2.5">
+          <div className="mb-1.5 flex items-center justify-between gap-2 text-xs">
+            <span className="inline-flex items-center gap-1.5 font-medium text-accent">
+              <Loader2 className="size-3.5 animate-spin" aria-hidden />
+              Backup in progress
+            </span>
+            <span className="tabular-nums text-muted">{backup?.label}</span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-bg">
+            {backup?.progress == null ? (
+              <div className="relative h-full w-full overflow-hidden">
+                <div className="absolute inset-y-0 w-2/5 animate-[job-indeterminate_1.2s_ease-in-out_infinite] rounded-full bg-accent" />
+              </div>
+            ) : (
+              <div
+                className="h-full rounded-full bg-accent transition-[width] duration-500"
+                style={{ width: `${backup.progress}%` }}
+              />
+            )}
+          </div>
+        </div>
+      ) : null}
 
       <div className="space-y-3">
         <MetricBar
@@ -131,20 +198,20 @@ export function GuestCard({
             <ActionBtn
               icon={<Power className="size-3.5" />}
               label="Shut down"
-              disabled={busy}
+              disabled={busy || backingUp}
               onClick={() => setConfirm("shutdown")}
             />
             <ActionBtn
               icon={<Square className="size-3.5" />}
               label="Stop"
               danger
-              disabled={busy}
+              disabled={busy || backingUp}
               onClick={() => setConfirm("stop")}
             />
             <ActionBtn
               icon={<RotateCcw className="size-3.5" />}
               label="Restart"
-              disabled={busy}
+              disabled={busy || backingUp}
               onClick={() => setConfirm("reboot")}
             />
           </>
@@ -153,20 +220,32 @@ export function GuestCard({
             icon={<Play className="size-3.5" />}
             label="Start"
             primary
-            disabled={busy}
+            disabled={busy || backingUp}
             onClick={() => run("start")}
           />
         )}
         <ActionBtn
           icon={<TerminalSquare className="size-3.5" />}
           label="Shell"
-          disabled={busy || !running}
+          disabled={busy || !running || backingUp}
           onClick={shell}
         />
         <ActionBtn
-          icon={<HardDriveDownload className="size-3.5" />}
-          label="Backup"
-          disabled={busy || !guest.node || guest.vmid == null}
+          icon={
+            backingUp ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <HardDriveDownload className="size-3.5" />
+            )
+          }
+          label={
+            backingUp
+              ? backup?.progress != null
+                ? `${Math.round(backup.progress)}%`
+                : "Backup…"
+              : "Backup"
+          }
+          disabled={busy || backingUp || !guest.node || guest.vmid == null}
           onClick={() => setBackupOpen(true)}
         />
       </div>

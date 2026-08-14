@@ -452,12 +452,15 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
             storage,
             mode: mode || "snapshot",
             compress: compress || "zstd",
+            // Default remove=1 requires Datastore.Allocate for prune — skip prune so
+            // VM.Backup + Datastore.AllocateSpace is enough to start a backup.
+            remove: 0,
           },
         );
         let upid = unwrapUpid(raw);
         if (!upid) {
           // Brief wait then resolve running vzdump task for this guest.
-          await new Promise((r) => setTimeout(r, 600));
+          await new Promise((r) => setTimeout(r, 800));
           upid = await findRecentGuestTask(session, node, "vzdump", vmid);
         }
         if (!upid && typeof raw === "string" && raw.startsWith("UPID:")) {
@@ -466,8 +469,8 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
         if (!upid) {
           res.status(502).json({
             error:
-              "Proxmox did not return a backup task id. Check VM.Backup permission and that the storage supports backups.",
-            raw: raw ?? null,
+              "Proxmox did not return a backup task id. Need VM.Backup on the guest and Datastore.AllocateSpace on the storage.",
+            raw: typeof raw === "string" ? raw : raw ?? null,
           });
           return;
         }
