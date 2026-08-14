@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --color-bg: #0b0d12;
+  --color-bg-2: #10141c;
+  --color-surface: #161b25;
+  --color-surface-2: #1c2330;
+  --color-line: #2a3344;
+  --color-line-2: #3a4558;
+  --color-ink: #eef3fb;
+  --color-muted: #8b97ab;
+  --color-accent: #ff7a1a;
+  --color-accent-2: #ff9a4d;
+  --color-cyan: #4cc9f0;
+  --color-good: #34d399;
+  --color-warn: #fbbf24;
+  --color-bad: #f87171;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.bg-grid {
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(255, 122, 26, 0.16), transparent),
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: auto, 48px 48px, 48px 48px;
+}
+
+.xterm,
+.xterm-viewport {
+  background: transparent !important;
+}
+
+.xterm-screen {
+  padding: 8px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2f394b;
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}

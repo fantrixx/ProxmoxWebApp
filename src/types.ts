@@ -1,0 +1,110 @@
+export type GuestType = "lxc" | "qemu";
+
+export type ResourceType = GuestType | "node" | "storage" | "sdn" | string;
+
+export type ClusterResource = {
+  id: string;
+  type: ResourceType;
+  node?: string;
+  vmid?: number;
+  name?: string;
+  status?: string;
+  cpu?: number;
+  maxcpu?: number;
+  mem?: number;
+  maxmem?: number;
+  disk?: number;
+  maxdisk?: number;
+  uptime?: number;
+  netin?: number;
+  netout?: number;
+  diskread?: number;
+  diskwrite?: number;
+  template?: number;
+  ips?: string[];
+  tags?: string;
+  level?: string;
+  storage?: string;
+  plugintype?: string;
+  shared?: number;
+};
+
+export type ClusterStatusItem = {
+  type: string;
+  id?: string;
+  name?: string;
+  ip?: string;
+  local?: number;
+  online?: number;
+  nodes?: number;
+  quorate?: number;
+  version?: number;
+};
+
+export type ResourcesResponse = {
+  resources: ClusterResource[];
+  version: { version: string; release: string } | null;
+  cluster: ClusterStatusItem[];
+};
+
+export type GuestStatus = {
+  status: string;
+  name?: string;
+  vmid?: number;
+  cpu?: number;
+  cpus?: number;
+  mem?: number;
+  maxmem?: number;
+  disk?: number;
+  maxdisk?: number;
+  uptime?: number;
+  netin?: number;
+  netout?: number;
+  diskread?: number;
+  diskwrite?: number;
+  swap?: number;
+  maxswap?: number;
+  ha?: { managed?: number };
+  pid?: number;
+  qmpstatus?: string;
+};
+
+export type RrdPoint = {
+  time: number;
+  cpu?: number;
+  mem?: number;
+  maxmem?: number;
+  netin?: number;
+  netout?: number;
+  disk?: number;
+  maxdisk?: number;
+  diskread?: number;
+  diskwrite?: number;
+};
+
+export type GuestDetail = {
+  status: GuestStatus;
+  config: Record<string, unknown>;
+  rrd: RrdPoint[];
+  ips: string[];
+};
+
+export type Snapshot = {
+  name: string;
+  description?: string;
+  snaptime?: number;
+  parent?: string;
+  vmstate?: number;
+};
+
+export type AuthUser = {
+  username: string;
+  host: string;
+};
+
+export type GuestRates = {
+  netin: number;
+  netout: number;
+  diskread: number;
+  diskwrite: number;
+};
