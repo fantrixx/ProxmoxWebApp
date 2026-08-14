@@ -170,13 +170,18 @@ export const dataApi = {
     },
   ) => {
     const compress = body.compress === "none" ? "0" : body.compress;
-    return api<{ ok: boolean; upid?: string }>(
-      `/api/guests/${encodeURIComponent(node)}/${encodeURIComponent(type)}/${encodeURIComponent(vmid)}/backup`,
-      {
-        method: "POST",
-        body: JSON.stringify({ ...body, compress }),
-      },
-    );
+    // Flat route — avoids nested path issues and is easier to debug.
+    return api<{ ok: boolean; upid?: string }>("/api/backup", {
+      method: "POST",
+      body: JSON.stringify({
+        node,
+        type,
+        vmid,
+        storage: body.storage,
+        mode: body.mode,
+        compress,
+      }),
+    });
   },
   restoreBackup: (body: {
     node: string;

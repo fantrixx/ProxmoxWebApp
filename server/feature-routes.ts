@@ -433,53 +433,175 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
           res.status(400).json({ error: "Invalid type." });
           return;
         }
-        const { storage, mode, compress } = req.body as {
+        const { storage, mode, compress } = (req.body || {}) as {
           storage?: string;
           mode?: "snapshot" | "suspend" | "stop";
           compress?: "zstd" | "gzip" | "lzo" | "0";
         };
-        if (!storage) {
+        if (!storage || !String(storage).trim()) {
           res.status(400).json({ error: "Storage is required." });
           return;
         }
-        const raw = await pveRequest(
-          session,
-          "POST",
-          `/nodes/${encodeURIComponent(node)}/vzdump`,
-          {
-            // Proxmox expects vmid as string (guest id list).
-            vmid: String(vmid),
-            storage,
-            mode: mode || "snapshot",
-            compress: compress || "zstd",
-            // Default remove=1 requires Datastore.Allocate for prune — skip prune so
-            // VM.Backup + Datastore.AllocateSpace is enough to start a backup.
-            remove: 0,
-          },
-        );
-        let upid = unwrapUpid(raw);
-        if (!upid) {
-          // Brief wait then resolve running vzdump task for this guest.
-          await new Promise((r) => setTimeout(r, 800));
-          upid = await findRecentGuestTask(session, node, "vzdump", vmid);
-        }
-        if (!upid && typeof raw === "string" && raw.startsWith("UPID:")) {
-          upid = raw;
-        }
-        if (!upid) {
-          res.status(502).json({
-            error:
-              "Proxmox did not return a backup task id. Need VM.Backup on the guest and Datastore.AllocateSpace on the storage.",
-            raw: typeof raw === "string" ? raw : raw ?? null,
+
+        // Confirm the guest exists on this node (wrong node → vzdump returns OK and does nothing).
+        try {
+          await pveRequest(
+            session,
+            "GET",
+            `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}/status/current`,
+          );
+        } catch (err) {
+          const msg =
+            err instanceof Error ? err.message : "Guest not found on this node.";
+          console.error("[backup] guest check failed", { node, type, vmid, msg });
+          res.status(404).json({
+            error: `Guest ${vmid} was not found on node "${node}". ${msg}`,
           });
           return;
         }
+
+        const payload = {
+          vmid: String(vmid),
+          storage: String(storage).trim(),
+          mode: mode || "snapshot",
+          compress: compress || "zstd",
+          // Skip prune (needs Datastore.Allocate). Default remove=1 often blocks backups.
+          remove: "0",
+        };
+
+        console.info("[backup] starting vzdump", { node, type, vmid, ...payload });
+
+        let raw: unknown;
+        try {
+          raw = await pveRequest(
+            session,
+            "POST",
+            `/nodes/${encodeURIComponent(node)}/vzdump`,
+            payload,
+          );
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "vzdump failed";
+          console.error("[backup] vzdump rejected", { node, vmid, storage, msg });
+          throw err;
+        }
+
+        console.info("[backup] vzdump response", { node, vmid, raw });
+
+        // Proxmox returns the string "OK" when it silently skips (wrong node / empty guest list).
+        if (raw === "OK" || raw === "ok") {
+          res.status(409).json({
+            error: `Proxmox did not start a backup for guest ${vmid} on node "${node}" (got OK with no task). Check that the guest lives on this node and no other vzdump lock is active.`,
+            raw,
+          });
+          return;
+        }
+
+        let upid = unwrapUpid(raw);
+        if (!upid) {
+          await new Promise((r) => setTimeout(r, 1000));
+          upid = await findRecentGuestTask(session, node, "vzdump", vmid);
+        }
+
+        if (!upid) {
+          console.error("[backup] no UPID", { node, vmid, raw });
+          res.status(502).json({
+            error:
+              "Proxmox did not return a backup task id. Need VM.Backup on the guest and Datastore.AllocateSpace on the storage.",
+            raw: raw ?? null,
+          });
+          return;
+        }
+
         res.json({ ok: true, upid });
       } catch (err) {
         sendError(res, err);
       }
     },
   );
+
+  // Flat alias — easier to debug than nested guest paths.
+  app.post("/api/backup", requireSession, async (req, res) => {
+    try {
+      const session = sessionOf(req);
+      const body = (req.body || {}) as {
+        node?: string;
+        type?: string;
+        vmid?: string | number;
+        storage?: string;
+        mode?: "snapshot" | "suspend" | "stop";
+        compress?: "zstd" | "gzip" | "lzo" | "0" | "none";
+      };
+      const node = String(body.node || "").trim();
+      const type = String(body.type || "").trim();
+      const vmid = String(body.vmid || "").trim();
+      const storage = String(body.storage || "").trim();
+      if (!node || !vmid || !storage) {
+        res.status(400).json({ error: "node, vmid, and storage are required." });
+        return;
+      }
+      if (type !== "lxc" && type !== "qemu") {
+        res.status(400).json({ error: "type must be lxc or qemu." });
+        return;
+      }
+
+      try {
+        await pveRequest(
+          session,
+          "GET",
+          `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}/status/current`,
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "not found";
+        res.status(404).json({
+          error: `Guest ${vmid} was not found on node "${node}". ${msg}`,
+        });
+        return;
+      }
+
+      const compress =
+        body.compress === "none" || body.compress === "0" ? "0" : body.compress || "zstd";
+      const payload = {
+        vmid,
+        storage,
+        mode: body.mode || "snapshot",
+        compress,
+        remove: "0",
+      };
+      console.info("[backup] POST /api/backup", { node, type, ...payload });
+
+      const raw = await pveRequest(
+        session,
+        "POST",
+        `/nodes/${encodeURIComponent(node)}/vzdump`,
+        payload,
+      );
+      console.info("[backup] /api/backup response", { raw });
+
+      if (raw === "OK" || raw === "ok") {
+        res.status(409).json({
+          error: `Proxmox did not start a backup for guest ${vmid} on node "${node}" (got OK with no task).`,
+          raw,
+        });
+        return;
+      }
+
+      let upid = unwrapUpid(raw);
+      if (!upid) {
+        await new Promise((r) => setTimeout(r, 1000));
+        upid = await findRecentGuestTask(session, node, "vzdump", vmid);
+      }
+      if (!upid) {
+        res.status(502).json({
+          error: "Proxmox did not return a backup task id.",
+          raw: raw ?? null,
+        });
+        return;
+      }
+      res.json({ ok: true, upid });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
 
   app.get(
     "/api/guests/:node/:type/:vmid/backups",

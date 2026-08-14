@@ -40,6 +40,7 @@ export function BackupDialog({
   const [mode, setMode] = useState<"snapshot" | "suspend" | "stop">("snapshot");
   const [compress, setCompress] = useState<"zstd" | "gzip" | "lzo" | "none">("zstd");
   const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
 
   const storages = useQuery({
     queryKey: ["backupStorages"],
@@ -59,7 +60,11 @@ export function BackupDialog({
   }, [storages.data, node]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setStartError(null);
+      setStarting(false);
+      return;
+    }
     if (!storage && nodeStorages[0]?.storage) {
       setStorage(nodeStorages[0].storage);
     }
@@ -99,7 +104,10 @@ export function BackupDialog({
 
   async function handleStart() {
     if (!selectedStorage || starting) {
-      if (!selectedStorage) toast("err", "Select a backup storage first.");
+      if (!selectedStorage) {
+        setStartError("Select a backup storage first.");
+        toast("err", "Select a backup storage first.");
+      }
       return;
     }
     const opts = {
@@ -111,12 +119,16 @@ export function BackupDialog({
       mode,
       compress,
     };
+    setStartError(null);
     setStarting(true);
-    onClose();
     try {
       await startGuestBackup(opts);
       void qc.invalidateQueries({ queryKey: ["guestBackups", node, type, vmidStr] });
       void qc.invalidateQueries({ queryKey: ["tasks"] });
+      onClose();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Backup failed.";
+      setStartError(message);
     } finally {
       setStarting(false);
     }
@@ -187,6 +199,11 @@ export function BackupDialog({
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col px-5 py-4">
+          {startError ? (
+            <div className="mb-4 rounded-xl border border-bad/40 bg-bad/10 px-3 py-2.5 text-sm text-bad">
+              {startError}
+            </div>
+          ) : null}
           <form
             id="backup-dialog-form"
             className="grid shrink-0 gap-3 sm:grid-cols-2"

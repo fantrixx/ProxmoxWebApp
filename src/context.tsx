@@ -71,7 +71,7 @@ type AppContextValue = {
     storage: string;
     mode?: "snapshot" | "suspend" | "stop";
     compress?: "zstd" | "gzip" | "lzo" | "none";
-  }) => Promise<void>;
+  }) => Promise<{ ok: boolean; upid?: string }>;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -149,7 +149,7 @@ export function AppProvider({
     setToasts((prev) => [...prev, { id, kind, text }]);
     window.setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 5200);
+    }, kind === "err" ? 12000 : 5200);
   }, []);
 
   const dismissToast = useCallback((id: string) => {
@@ -206,17 +206,23 @@ export function AppProvider({
           mode: opts.mode,
           compress: opts.compress,
         });
-        if (res.upid) {
-          attachJobUpid(jobId, res.upid);
-          toast("ok", "Backup started.");
-        } else {
-          failJob(jobId, "No task id returned by Proxmox.");
-          toast("err", "Backup started but no task id was returned.");
+        if (!res.upid) {
+          const message = "No task id returned by Proxmox.";
+          failJob(jobId, message);
+          toast("err", message);
+          throw new Error(message);
         }
+        attachJobUpid(jobId, res.upid);
+        toast("ok", "Backup started.");
+        return res;
       } catch (err) {
         const message = err instanceof Error ? err.message : "Backup failed.";
-        failJob(jobId, message);
-        toast("err", message);
+        // Avoid double-fail when we already marked the job above.
+        if (message !== "No task id returned by Proxmox.") {
+          failJob(jobId, message);
+          toast("err", message);
+        }
+        throw err instanceof Error ? err : new Error(message);
       }
     },
     [trackJob, attachJobUpid, failJob, toast],
