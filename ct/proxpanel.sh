@@ -5,6 +5,8 @@
 #
 #   bash -c "$(wget -qLO - https://raw.githubusercontent.com/fantrixx/ProxmoxWebApp/main/ct/proxpanel.sh)"
 #
+# Danach: Standard (wie bisher) oder Custom (CPU, Netz, Port, Proxmox-API, SSH, …).
+#
 # Update (Code von GitHub holen, bauen, Dienst neu starten):
 #
 #   Im Container:     proxpanel-update
@@ -116,8 +118,34 @@ ask() {
 }
 
 yesno() {
-  whiptail --backtitle "$APP" --title "$1" --yesno "$2" 10 70
+  local title="$1" prompt="$2"
+  shift 2
+  whiptail --backtitle "$APP" --title "$title" "$@" --yesno "$prompt" 12 72
 }
+
+info_box() {
+  whiptail --backtitle "$APP" --title "$1" --msgbox "$2" 12 72
+}
+
+ask_secret() {
+  local result
+  result="$(whiptail --backtitle "$APP" --title "$1" --passwordbox "$2" 10 70 3>&1 1>&2 2>&3)" || exit 0
+  echo "$result"
+}
+
+ask_int() {
+  local title="$1" prompt="$2" default="$3" min="$4" max="$5" val
+  while true; do
+    val="$(ask "$title" "$prompt" "$default")"
+    if [[ "$val" =~ ^[0-9]+$ ]] && ((val >= min && val <= max)); then
+      echo "$val"
+      return
+    fi
+    info_box "$title" "Bitte eine Zahl zwischen ${min} und ${max} eingeben."
+  done
+}
+
+yn_de() { [[ "${1:-}" == "1" ]] && echo "ja" || echo "nein"; }
 
 next_ctid() {
   pvesh get /cluster/nextid 2>/dev/null || echo 100
@@ -193,7 +221,7 @@ ct_ip() {
 }
 
 install_inside_ct() {
-  local ctid="$1" pve_ip="$2" repo="$3"
+  local ctid="$1"
 
   msg_info "Warte auf Netzwerk im Container …"
   local n
@@ -214,8 +242,31 @@ apt-get install -y -qq nodejs
 node -v && npm -v"
   msg_ok "Node.js installiert"
 
-  msg_info "Klone ProxPanel von GitHub (${repo} @ ${REPO_BRANCH}) …"
-  pct exec "$ctid" -- bash -lc "rm -rf '${APP_DIR}' && git clone --depth 1 --branch '${REPO_BRANCH}' '${repo}' '${APP_DIR}'"
+  if [[ "${CT_SSH:-0}" == "1" ]]; then
+    msg_info "Aktiviere SSH-Zugang für root …"
+    pct exec "$ctid" -- bash -lc 'export DEBIAN_FRONTEND=noninteractive
+apt-get install -y -qq openssh-server
+sed -i "s/^#\\?PermitRootLogin.*/PermitRootLogin yes/" /etc/ssh/sshd_config
+systemctl enable --now ssh'
+    msg_ok "SSH ist aktiv (root-Login)"
+  fi
+
+  if [[ -n "${CT_TIMEZONE:-}" ]]; then
+    msg_info "Setze Zeitzone ${CT_TIMEZONE} …"
+    pct exec "$ctid" -- bash -lc "timedatectl set-timezone '${CT_TIMEZONE}' 2>/dev/null || {
+      echo '${CT_TIMEZONE}' > /etc/timezone
+      ln -sfn '/usr/share/zoneinfo/${CT_TIMEZONE}' /etc/localtime
+    }"
+    msg_ok "Zeitzone ${CT_TIMEZONE}"
+  fi
+
+  if [[ "${CT_IPV6:-1}" != "1" ]]; then
+    pct exec "$ctid" -- bash -lc 'printf "%s\n" "net.ipv6.conf.all.disable_ipv6=1" "net.ipv6.conf.default.disable_ipv6=1" > /etc/sysctl.d/99-disable-ipv6.conf
+sysctl -p /etc/sysctl.d/99-disable-ipv6.conf >/dev/null 2>&1 || true'
+  fi
+
+  msg_info "Klone ProxPanel von GitHub (${REPO_URL} @ ${REPO_BRANCH}) …"
+  pct exec "$ctid" -- bash -lc "rm -rf '${APP_DIR}' && git clone --depth 1 --branch '${REPO_BRANCH}' '${REPO_URL}' '${APP_DIR}'"
   msg_ok "Quellcode liegt in ${APP_DIR}"
 
   msg_info "Installiere npm-Abhängigkeiten und baue die App …"
@@ -223,11 +274,31 @@ node -v && npm -v"
   msg_ok "Build fertig"
 
   msg_info "Schreibe Konfiguration und systemd-Dienst …"
-  pct exec "$ctid" -- bash -lc "cat > '${APP_DIR}/.env' <<EOF
-PORT=${APP_PORT}
-PROXMOX_URL=https://${pve_ip}:8006
-PROXMOX_INSECURE_TLS=true
-EOF"
+  local envtmp old_umask
+  envtmp="$(mktemp)"
+  old_umask="$(umask)"
+  umask 077
+  {
+    printf 'PORT=%s\n' "${APP_PORT}"
+    printf 'PROXMOX_URL=%s\n' "${PVE_URL}"
+    printf 'PROXMOX_INSECURE_TLS=%s\n' "${PROXMOX_INSECURE}"
+    if [[ -n "${PROXMOX_USER_CFG:-}" ]]; then
+      printf 'PROXMOX_USER=%s\n' "${PROXMOX_USER_CFG}"
+    fi
+    if [[ -n "${PROXMOX_REALM_CFG:-}" ]]; then
+      printf 'PROXMOX_REALM=%s\n' "${PROXMOX_REALM_CFG}"
+    fi
+    if [[ -n "${PROXMOX_TOKEN_ID_CFG:-}" ]]; then
+      printf 'PROXMOX_TOKEN_ID=%s\n' "${PROXMOX_TOKEN_ID_CFG}"
+    fi
+    if [[ -n "${PROXMOX_TOKEN_SECRET_CFG:-}" ]]; then
+      printf 'PROXMOX_TOKEN_SECRET=%s\n' "${PROXMOX_TOKEN_SECRET_CFG}"
+    fi
+  } > "$envtmp"
+  umask "$old_umask"
+  pct push "$ctid" "$envtmp" "${APP_DIR}/.env"
+  rm -f "$envtmp"
+  pct exec "$ctid" -- chmod 600 "${APP_DIR}/.env"
 
   pct exec "$ctid" -- bash -lc "cat > /etc/systemd/system/proxpanel.service <<'EOF'
 [Unit]
@@ -239,7 +310,7 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=/opt/proxpanel
 Environment=NODE_ENV=production
-Environment=PORT=3000
+Environment=PORT=${APP_PORT}
 EnvironmentFile=-/opt/proxpanel/.env
 ExecStart=/usr/bin/npx tsx server/index.ts
 Restart=always
@@ -354,6 +425,152 @@ update_from_pve_host() {
   pct exec "$ctid" -- bash -lc "wget -qO /tmp/proxpanel.sh '${script_url}' && bash /tmp/proxpanel.sh --update && rm -f /tmp/proxpanel.sh"
 }
 
+collect_custom_settings() {
+  CTID="$(ask_int "CTID" "Container-ID" "$CTID" 100 999999999)"
+  HN="$(ask "Hostname" "Hostname des Containers" "$HN")"
+  [[ -z "$HN" ]] && HN="proxpanel"
+  CPU="$(ask_int "CPU" "CPU-Kerne" "$CPU" 1 128)"
+  RAM="$(ask_int "RAM" "Arbeitsspeicher in MiB" "$RAM" 512 524288)"
+  DISK="$(ask_int "Disk" "Festplatte in GiB" "$DISK" 4 1024)"
+  CT_SWAP="$(ask_int "Swap" "Swap in MiB" "$CT_SWAP" 0 65536)"
+
+  STORAGE="$(select_from_list "Storage" "Container-Storage (rootfs)" "${storages[@]}")"
+  TPL_STORAGE="$(select_from_list "Template-Storage" "Storage für LXC-Templates" "${templates[@]}")"
+  BRG="$(select_from_list "Bridge" "Netzwerk-Bridge" "${bridges[@]}")"
+
+  if yesno "Netzwerk" "DHCP verwenden?\n(Nein = statische IPv4)"; then
+    NET="dhcp"
+    STATIC_IP=""
+    GATEWAY=""
+  else
+    STATIC_IP="$(ask "IP" "IPv4 mit Prefix, z. B. 192.168.1.50/24" "${STATIC_IP:-192.168.1.50/24}")"
+    GATEWAY="$(ask "Gateway" "Gateway" "${GATEWAY:-192.168.1.1}")"
+    NET="ip=${STATIC_IP},gw=${GATEWAY}"
+  fi
+
+  CT_VLAN="$(ask "VLAN" "VLAN-Tag (leer = keins)" "$CT_VLAN")"
+  if [[ -n "$CT_VLAN" ]]; then
+    if [[ ! "$CT_VLAN" =~ ^[0-9]+$ ]] || ((CT_VLAN < 1 || CT_VLAN > 4094)); then
+      info_box "VLAN" "Ungültiger Tag — VLAN wird weggelassen."
+      CT_VLAN=""
+    fi
+  fi
+
+  CT_DNS="$(ask "DNS" "DNS-Server (leer = Proxmox-Standard)" "$CT_DNS")"
+  CT_SEARCH="$(ask "Suchdomain" "DNS-Suchdomain (leer = keine)" "$CT_SEARCH")"
+
+  if yesno "IPv6" "IPv6 aktivieren?"; then
+    CT_IPV6=1
+  else
+    CT_IPV6=0
+  fi
+
+  PW="$(ask_secret "Passwort" "root-Passwort (leer = zufällig erzeugen)")"
+
+  if yesno "SSH" "SSH-Zugang für root aktivieren?" --defaultno; then
+    CT_SSH=1
+  else
+    CT_SSH=0
+  fi
+
+  if yesno "Autostart" "Container beim Host-Start automatisch starten?"; then
+    CT_ONBOOT=1
+  else
+    CT_ONBOOT=0
+  fi
+
+  if yesno "Schutz" "Löschschutz aktivieren (Protection)?" --defaultno; then
+    CT_PROTECTION=1
+  else
+    CT_PROTECTION=0
+  fi
+
+  if yesno "Privilegien" "Unprivilegierten Container anlegen?\n(Empfohlen: Ja. Nein = privilegiert)"; then
+    CT_UNPRIVILEGED=1
+  else
+    CT_UNPRIVILEGED=0
+  fi
+
+  CT_TAGS="$(ask "Tags" "Proxmox-Tags (Semikolon-getrennt)" "$CT_TAGS")"
+
+  local tz_choice
+  tz_choice="$(whiptail --backtitle "$APP" --title "Zeitzone" --menu "Zeitzone des Containers" 16 70 6 \
+    "1" "Europe/Berlin" \
+    "2" "Europe/Vienna" \
+    "3" "Europe/Zurich" \
+    "4" "UTC" \
+    "5" "Wie der Host" \
+    "6" "Andere …" 3>&1 1>&2 2>&3)" || exit 0
+  case "$tz_choice" in
+    1) CT_TIMEZONE="Europe/Berlin" ;;
+    2) CT_TIMEZONE="Europe/Vienna" ;;
+    3) CT_TIMEZONE="Europe/Zurich" ;;
+    4) CT_TIMEZONE="UTC" ;;
+    5) CT_TIMEZONE="" ;;
+    6) CT_TIMEZONE="$(ask "Zeitzone" "z. B. Europe/Berlin" "Europe/Berlin")" ;;
+  esac
+
+  APP_PORT="$(ask_int "Web-Port" "Port der ProxPanel-Oberfläche" "$APP_PORT" 1 65535)"
+  PVE_URL="$(ask "Proxmox-API" "URL der Proxmox-API" "$PVE_URL")"
+  [[ -z "$PVE_URL" ]] && PVE_URL="https://$(pve_host_ip):8006"
+
+  if yesno "TLS" "TLS-Zertifikat der Proxmox-API prüfen?\n(Bei Self-Signed typischerweise Nein)" --defaultno; then
+    PROXMOX_INSECURE="false"
+  else
+    PROXMOX_INSECURE="true"
+  fi
+
+  PROXMOX_USER_CFG="$(ask "Benutzer" "Proxmox-Benutzer zum Vorausfüllen (leer = überspringen)" "${PROXMOX_USER_CFG}")"
+  if [[ -n "$PROXMOX_USER_CFG" ]]; then
+    PROXMOX_REALM_CFG="$(ask "Realm" "Realm" "${PROXMOX_REALM_CFG:-pam}")"
+  else
+    PROXMOX_REALM_CFG=""
+  fi
+
+  if yesno "API-Token" "API-Token in die .env schreiben?\n(Sonst Login nur über die Weboberfläche)" --defaultno; then
+    PROXMOX_TOKEN_ID_CFG="$(ask "Token-ID" "z. B. root@pam!proxpanel" "${PROXMOX_TOKEN_ID_CFG:-}")"
+    PROXMOX_TOKEN_SECRET_CFG="$(ask_secret "Token-Secret" "Token-Secret")"
+  else
+    PROXMOX_TOKEN_ID_CFG=""
+    PROXMOX_TOKEN_SECRET_CFG=""
+  fi
+}
+
+confirm_custom_settings() {
+  local net_txt tls_txt token_txt tz_txt vlan_txt
+  if [[ "$NET" == "dhcp" ]]; then
+    net_txt="DHCP"
+  else
+    net_txt="${STATIC_IP}  gw ${GATEWAY}"
+  fi
+  [[ "$PROXMOX_INSECURE" == "true" ]] && tls_txt="nicht prüfen" || tls_txt="prüfen"
+  [[ -n "$PROXMOX_TOKEN_ID_CFG" ]] && token_txt="$PROXMOX_TOKEN_ID_CFG" || token_txt="nein"
+  [[ -n "$CT_TIMEZONE" ]] && tz_txt="$CT_TIMEZONE" || tz_txt="Host"
+  [[ -n "$CT_VLAN" ]] && vlan_txt="$CT_VLAN" || vlan_txt="—"
+
+  local summary
+  summary="$(
+    cat <<EOF
+Container-ID:      ${CTID}
+Hostname:          ${HN}
+CPU / RAM / Disk:  ${CPU} / ${RAM} MiB / ${DISK} GiB  (Swap ${CT_SWAP} MiB)
+Storage:           ${STORAGE}   Template: ${TPL_STORAGE}
+Bridge:            ${BRG}   VLAN: ${vlan_txt}
+Netzwerk:          ${net_txt}
+IPv6 / SSH:        $(yn_de "$CT_IPV6") / $(yn_de "$CT_SSH")
+Autostart / Schutz: $(yn_de "$CT_ONBOOT") / $(yn_de "$CT_PROTECTION")
+Unprivilegiert:    $(yn_de "$CT_UNPRIVILEGED")
+Zeitzone / Tags:   ${tz_txt} / ${CT_TAGS:-—}
+Web-Port:          ${APP_PORT}
+Proxmox-API:       ${PVE_URL}
+TLS / Token:       ${tls_txt} / ${token_txt}
+
+Container mit diesen Einstellungen anlegen?
+EOF
+  )"
+  whiptail --backtitle "$APP" --title "Zusammenfassung" --yesno "$summary" 24 78
+}
+
 create_container() {
   header_info
   need_root
@@ -365,7 +582,6 @@ create_container() {
 
   msg_ok "Beziehe App und Abhängigkeiten von GitHub: ${REPO_URL} (${REPO_BRANCH})"
 
-  local CTID HN CPU RAM DISK BRG STORAGE TPL_STORAGE NET PW MODE
   CTID="$(next_ctid)"
   HN="proxpanel"
   CPU="2"
@@ -373,45 +589,57 @@ create_container() {
   DISK="8"
   PW=""
   NET="dhcp"
+  STATIC_IP=""
+  GATEWAY=""
+  CT_SWAP="512"
+  CT_ONBOOT=1
+  CT_UNPRIVILEGED=1
+  CT_PROTECTION=0
+  CT_SSH=0
+  CT_VLAN=""
+  CT_DNS=""
+  CT_SEARCH=""
+  CT_IPV6=1
+  CT_TIMEZONE=""
+  CT_TAGS="proxpanel"
+  APP_PORT="3000"
+  PVE_URL="https://$(pve_host_ip):8006"
+  PROXMOX_INSECURE="true"
+  PROXMOX_USER_CFG=""
+  PROXMOX_REALM_CFG=""
+  PROXMOX_TOKEN_ID_CFG=""
+  PROXMOX_TOKEN_SECRET_CFG=""
 
-  local storages=()
+  storages=()
   mapfile -t storages < <(list_storages rootdir)
   STORAGE="${storages[0]:-local-lvm}"
 
-  local templates=()
+  templates=()
   mapfile -t templates < <(list_storages vztmpl)
   TPL_STORAGE="${templates[0]:-local}"
 
-  local bridges=()
+  bridges=()
   mapfile -t bridges < <(list_bridges)
   BRG="${bridges[0]:-vmbr0}"
 
-  MODE="1"
+  local MODE="1"
   if [[ -t 0 && "${DEFAULTS:-}" != "yes" ]]; then
-    MODE="$(whiptail --backtitle "$APP" --title "$APP LXC" --menu "Einstellungen" 14 70 2 \
-      "1" "Standard (Debian 12, DHCP, 2 CPU / 2 GiB / 8 GiB)" \
-      "2" "Erweitert" 3>&1 1>&2 2>&3 || true)"
+    MODE="$(whiptail --backtitle "$APP" --title "$APP LXC" --menu "Installationsart" 15 74 2 \
+      "1" "Standard — Debian 12, DHCP, 2 CPU / 2 GiB / 8 GiB" \
+      "2" "Custom — CPU, Netz, Port, Proxmox-API u. a. selbst wählen" 3>&1 1>&2 2>&3 || true)"
     [[ -z "$MODE" ]] && exit 0
   fi
 
   if [[ "$MODE" == "2" ]]; then
-    CTID="$(ask "CTID" "Container-ID" "$CTID")"
-    HN="$(ask "Hostname" "Hostname" "$HN")"
-    CPU="$(ask "CPU" "CPU-Kerne" "$CPU")"
-    RAM="$(ask "RAM" "Arbeitsspeicher in MiB" "$RAM")"
-    DISK="$(ask "Disk" "Festplatte in GiB" "$DISK")"
-    STORAGE="$(select_from_list "Storage" "Container-Storage (rootfs)" "${storages[@]}")"
-    TPL_STORAGE="$(select_from_list "Template-Storage" "Storage für LXC-Templates" "${templates[@]}")"
-    BRG="$(select_from_list "Bridge" "Netzwerk-Bridge" "${bridges[@]}")"
-    if yesno "Netzwerk" "DHCP verwenden?\n(Nein = statische IPv4)"; then
-      NET="dhcp"
-    else
-      local staticip gw
-      staticip="$(ask "IP" "IPv4 mit Prefix, z.B. 192.168.1.50/24" "192.168.1.50/24")"
-      gw="$(ask "Gateway" "Gateway" "192.168.1.1")"
-      NET="ip=${staticip},gw=${gw}"
-    fi
-    PW="$(ask "Passwort" "root-Passwort (leer = zufällig)" "")"
+    while true; do
+      collect_custom_settings
+      if confirm_custom_settings; then
+        break
+      fi
+      if ! yesno "Custom" "Einstellungen erneut anpassen?\n(Nein = Abbruch)"; then
+        exit 0
+      fi
+    done
   else
     STORAGE="$(select_from_list "Storage" "Container-Storage" "${storages[@]}")"
     if [[ ${#templates[@]} -gt 1 ]]; then
@@ -445,20 +673,33 @@ create_container() {
   else
     net0+=",${NET}"
   fi
+  if [[ "$MODE" == "2" && "${CT_IPV6}" == "1" ]]; then
+    net0+=",ip6=auto"
+  fi
+  if [[ -n "$CT_VLAN" ]]; then
+    net0+=",tag=${CT_VLAN}"
+  fi
 
-  pct create "$CTID" "${TPL_STORAGE}:vztmpl/${TEMPLATE}" \
-    --hostname "$HN" \
-    --cores "$CPU" \
-    --memory "$RAM" \
-    --swap 512 \
-    --rootfs "${STORAGE}:${DISK}" \
-    --net0 "$net0" \
-    --unprivileged 1 \
-    --features nesting=1 \
-    --onboot 1 \
-    --password "$PW" \
-    --description "ProxPanel - Proxmox Web-Verwaltung" \
+  local create_opts=(
+    --hostname "$HN"
+    --cores "$CPU"
+    --memory "$RAM"
+    --swap "$CT_SWAP"
+    --rootfs "${STORAGE}:${DISK}"
+    --net0 "$net0"
+    --unprivileged "$CT_UNPRIVILEGED"
+    --features nesting=1
+    --onboot "$CT_ONBOOT"
+    --password "$PW"
+    --description "ProxPanel - Proxmox Web-Verwaltung"
     --start 0
+  )
+  [[ -n "$CT_DNS" ]] && create_opts+=(--nameserver "$CT_DNS")
+  [[ -n "$CT_SEARCH" ]] && create_opts+=(--searchdomain "$CT_SEARCH")
+  [[ -n "$CT_TAGS" ]] && create_opts+=(--tags "$CT_TAGS")
+  [[ "$CT_PROTECTION" == "1" ]] && create_opts+=(--protection 1)
+
+  pct create "$CTID" "${TPL_STORAGE}:vztmpl/${TEMPLATE}" "${create_opts[@]}"
   msg_ok "Container ${CTID} angelegt"
 
   msg_info "Starte Container …"
@@ -466,9 +707,8 @@ create_container() {
   sleep 4
   msg_ok "Container läuft"
 
-  local PVE_IP
-  PVE_IP="$(pve_host_ip)"
-  install_inside_ct "$CTID" "$PVE_IP" "$REPO_URL"
+  [[ -z "$PVE_URL" ]] && PVE_URL="https://$(pve_host_ip):8006"
+  install_inside_ct "$CTID"
 
   local IP
   IP="$(ct_ip "$CTID" || true)"
@@ -481,9 +721,12 @@ create_container() {
   echo
   echo -e "${TAB}${INFO}  URL:          ${GN}http://${IP}:${APP_PORT}${CL}"
   echo -e "${TAB}${INFO}  Container:    ${GN}${CTID}${CL} (${HN})"
-  echo -e "${TAB}${INFO}  Proxmox-API:  ${GN}https://${PVE_IP}:8006${CL}  (in .env hinterlegt)"
+  echo -e "${TAB}${INFO}  Proxmox-API:  ${GN}${PVE_URL}${CL}  (in .env hinterlegt)"
   if [[ "$PW_GENERATED" == "1" ]]; then
     echo -e "${TAB}${INFO}  root-Passwort:${GN} ${PW}${CL}"
+  fi
+  if [[ "$CT_SSH" == "1" ]]; then
+    echo -e "${TAB}${INFO}  SSH:          ${GN}ssh root@${IP}${CL}"
   fi
   echo -e "${TAB}${INFO}  Im Browser anmelden mit deinem Proxmox-Benutzer (z. B. root@pam)."
   echo -e "${TAB}${INFO}  Update im CT:  ${GN}proxpanel-update${CL}"

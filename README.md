@@ -12,7 +12,12 @@ bash -c "$(wget -qLO - https://raw.githubusercontent.com/fantrixx/ProxmoxWebApp/
 
 Das Script legt einen Debian-12-LXC an, klont [dieses Repo](https://github.com/fantrixx/ProxmoxWebApp), installiert Node.js und npm-Abhängigkeiten, baut die App und startet den Dienst.
 
-Danach: `http://<CT-IP>:3000` — anmelden mit dem Proxmox-Benutzer (z. B. `root@pam`).
+Beim Start kannst du wählen:
+
+- **Standard** — wie bisher: Debian 12, DHCP, 2 CPU / 2 GiB RAM / 8 GiB Disk, Port 3000
+- **Custom** — CTID, CPU/RAM/Disk/Swap, Storage, Bridge, DHCP oder statische IP, VLAN, DNS, IPv6, root-Passwort, SSH, Autostart, Löschschutz, privilegiert/unprivilegiert, Zeitzone, Tags, Web-Port, Proxmox-API-URL, TLS, optional Benutzer/Token. Vor dem Anlegen erscheint eine Zusammenfassung.
+
+Danach: `http://<CT-IP>:3000` (bzw. der gewählte Port) — anmelden mit dem Proxmox-Benutzer (z. B. `root@pam`).
 
 Ohne Rückfragen: `DEFAULTS=yes bash -c "$(wget -qLO - https://raw.githubusercontent.com/fantrixx/ProxmoxWebApp/main/ct/proxpanel.sh)"`
 
