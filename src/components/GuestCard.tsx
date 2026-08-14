@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
+  HardDriveDownload,
   Play,
   Power,
   RotateCcw,
@@ -21,6 +22,7 @@ import {
 import { MetricBar } from "./MetricBar";
 import { StatusBadge } from "./StatusBadge";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { BackupDialog } from "./BackupDialog";
 import { IpList } from "./IpList";
 import { useApp } from "../context";
 import { useGuestAction } from "../hooks";
@@ -38,6 +40,7 @@ export function GuestCard({
   const { openConsole, toast } = useApp();
   const action = useGuestAction();
   const [confirm, setConfirm] = useState<PowerKind | null>(null);
+  const [backupOpen, setBackupOpen] = useState(false);
   const running = guest.status === "running";
   const type = (guest.type === "qemu" ? "qemu" : "lxc") as GuestType;
   const busy = action.isPending;
@@ -160,6 +163,12 @@ export function GuestCard({
           disabled={busy || !running}
           onClick={shell}
         />
+        <ActionBtn
+          icon={<HardDriveDownload className="size-3.5" />}
+          label="Backup"
+          disabled={busy || !guest.node || guest.vmid == null}
+          onClick={() => setBackupOpen(true)}
+        />
       </div>
 
       {meta && confirm ? (
@@ -171,6 +180,17 @@ export function GuestCard({
           busy={busy}
           onCancel={() => setConfirm(null)}
           onConfirm={() => run(confirm)}
+        />
+      ) : null}
+
+      {guest.node && guest.vmid != null ? (
+        <BackupDialog
+          open={backupOpen}
+          onClose={() => setBackupOpen(false)}
+          node={guest.node}
+          type={type}
+          vmid={guest.vmid}
+          name={guest.name}
         />
       ) : null}
     </article>
