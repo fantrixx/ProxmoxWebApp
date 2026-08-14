@@ -406,9 +406,12 @@ update_inside_ct() {
   cd "$APP_DIR"
   if [[ -d .git ]]; then
     git remote set-url origin "$REPO_URL" >/dev/null 2>&1 || true
+    # Drop local edits (e.g. package-lock from npm) so the update always matches GitHub.
+    # Keep .env — never delete it.
     git fetch --depth 1 origin "$branch"
-    git checkout -B "$branch" "origin/$branch"
+    git checkout -f -B "$branch" "origin/$branch"
     git reset --hard "origin/$branch"
+    git clean -fd -e .env -e node_modules -e dist
     msg_ok "Current commit: $(git log -1 --pretty=format:'%h %s')"
   else
     msg_warn "No Git repo — npm build only. For code updates, run the helper script from the host with UPDATE=1."
