@@ -27,6 +27,7 @@ import {
   getSession,
   type Session,
 } from "./session.ts";
+import { getAppVersion } from "./version.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isProd = process.env.NODE_ENV === "production";
@@ -73,6 +74,18 @@ function param(value: string | string[] | undefined): string {
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, name: "ProxPanel" });
+});
+
+app.get("/api/version", async (req, res) => {
+  try {
+    const force = req.query.refresh === "1" || req.query.refresh === "true";
+    const info = await getAppVersion(force);
+    res.json(info);
+  } catch (err) {
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Versionsprüfung fehlgeschlagen",
+    });
+  }
 });
 
 app.get("/api/auth/defaults", (_req, res) => {

@@ -84,6 +84,32 @@ set -euo pipefail
 exec bash /opt/proxpanel/ct/proxpanel.sh --update
 EOF
   chmod 755 /usr/local/bin/proxpanel-update
+
+  cat > /etc/profile.d/proxpanel.sh <<'EOF'
+# ProxPanel shell banner (interactive logins only)
+if [[ $- == *i* ]]; then
+  echo
+  echo "  ProxPanel — Update mit:  proxpanel-update"
+  echo "  Dienst: systemctl status proxpanel  ·  Logs: journalctl -u proxpanel -f"
+  echo
+fi
+EOF
+  chmod 644 /etc/profile.d/proxpanel.sh
+
+  local port="${APP_PORT:-3000}"
+  local ip
+  ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  cat > /etc/motd <<EOF
+
+ProxPanel  →  http://${ip:-<CT-IP>}:${port}
+────────────────────────────────────────────────────────
+Update:     proxpanel-update
+Dienst:     systemctl status proxpanel
+Logs:       journalctl -u proxpanel -f
+Quelle:     /opt/proxpanel
+────────────────────────────────────────────────────────
+
+EOF
 }
 
 is_pve_host() { command -v pveversion >/dev/null 2>&1 && command -v pct >/dev/null 2>&1; }
@@ -327,17 +353,29 @@ cat > /usr/local/bin/proxpanel-update <<'UPEOF'
 set -euo pipefail
 exec bash /opt/proxpanel/ct/proxpanel.sh --update
 UPEOF
-chmod 755 /usr/local/bin/proxpanel-update"
+chmod 755 /usr/local/bin/proxpanel-update
+cat > /etc/profile.d/proxpanel.sh <<'UPEOF'
+# ProxPanel shell banner (interactive logins only)
+if [[ \$- == *i* ]]; then
+  echo
+  echo \"  ProxPanel — Update mit:  proxpanel-update\"
+  echo \"  Dienst: systemctl status proxpanel  ·  Logs: journalctl -u proxpanel -f\"
+  echo
+fi
+UPEOF
+chmod 644 /etc/profile.d/proxpanel.sh
+cat > /etc/motd <<EOF
 
-  pct exec "$ctid" -- bash -lc "cat > /etc/motd <<EOF
-
-ProxPanel  →  http://\$(hostname -I | awk '{print \$1}'):${APP_PORT}
+ProxPanel  →  http://\$(hostname -I 2>/dev/null | awk '{print \$1}'):${APP_PORT}
+────────────────────────────────────────────────────────
 Update:     proxpanel-update
 Dienst:     systemctl status proxpanel
 Logs:       journalctl -u proxpanel -f
 Quelle:     ${APP_DIR}
+────────────────────────────────────────────────────────
 
 EOF"
+
   msg_ok "Dienst proxpanel ist aktiv"
 }
 

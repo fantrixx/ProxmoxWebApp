@@ -10,6 +10,19 @@ export class ApiError extends Error {
   }
 }
 
+export type AppVersionInfo = {
+  name: string;
+  currentVersion: string;
+  currentCommit: string | null;
+  latestCommit: string | null;
+  latestMessage: string | null;
+  updateAvailable: boolean;
+  updateCommand: string;
+  repoUrl: string;
+  checkedAt: number;
+  error?: string;
+};
+
 async function parseError(res: Response): Promise<string> {
   try {
     const body = (await res.json()) as { error?: string };
@@ -53,6 +66,11 @@ export const authApi = {
       body: JSON.stringify(body),
     }),
   logout: () => api<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
+};
+
+export const metaApi = {
+  version: (refresh = false) =>
+    api<AppVersionInfo>(`/api/version${refresh ? "?refresh=1" : ""}`),
 };
 
 export const dataApi = {

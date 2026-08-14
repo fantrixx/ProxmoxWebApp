@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Cpu } from "lucide-react";
 import { ApiError, authApi } from "../api";
+import { UpdateBanner } from "../components/UpdateBanner";
 
 const LOGIN_PREFS_KEY = "proxpanel.login";
 
@@ -100,6 +101,8 @@ export default function Login() {
             <p className="text-sm text-muted">Proxmox VE Administration</p>
           </div>
         </div>
+
+        <UpdateBanner className="mb-4" />
 
         <form
           onSubmit={(e) => void submit(e, false)}

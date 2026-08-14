@@ -25,6 +25,8 @@ Ohne Rückfragen: `DEFAULTS=yes bash -c "$(wget -qLO - https://raw.githubusercon
 
 Holt den aktuellen Stand von GitHub, baut die App und startet den Dienst neu (`.env` bleibt erhalten).
 
+Beim Shell-Login im Container erscheint ein Hinweis auf `proxpanel-update`. Die Weboberfläche prüft auf Login- und Übersichtsseite, ob auf GitHub eine neuere Version liegt, und zeigt dann einen Hinweis mit dem Update-Befehl.
+
 **Im Container** (nach `pct enter <CTID>` oder SSH):
 
 ```bash

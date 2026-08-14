@@ -4,6 +4,7 @@ import { Header } from "../components/Header";
 import { GuestCard } from "../components/GuestCard";
 import { MetricBar } from "../components/MetricBar";
 import { StatusBadge } from "../components/StatusBadge";
+import { UpdateBanner } from "../components/UpdateBanner";
 import { useGuestRates, useResources } from "../hooks";
 import {
   cpuPct,
@@ -49,6 +50,8 @@ export default function Dashboard() {
         }
       />
       <div className="space-y-6 px-4 py-4 md:space-y-8 md:px-8 md:py-6">
+        <UpdateBanner />
+
         {q.isError ? (
           <p className="rounded-xl border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad">
             {(q.error as Error).message}
