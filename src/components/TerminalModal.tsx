@@ -6,6 +6,19 @@ import { X } from "lucide-react";
 import "@xterm/xterm/css/xterm.css";
 import { useApp } from "../context";
 
+const textEncoder = new TextEncoder();
+
+/** Proxmox termproxy: 0:BYTE_LENGTH:MSG */
+function encodeInput(data: string): string {
+  const bytes = textEncoder.encode(data);
+  return `0:${bytes.length}:${data}`;
+}
+
+/** Proxmox termproxy: 1:COLS:ROWS: */
+function encodeResize(cols: number, rows: number): string {
+  return `1:${cols}:${rows}:`;
+}
+
 export function TerminalModal() {
   const { consoleTarget, closeConsole } = useApp();
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -43,7 +56,23 @@ export function TerminalModal() {
     const ws = new WebSocket(`${proto}://${location.host}/ws/console?${qs}`);
     ws.binaryType = "arraybuffer";
 
-    ws.onopen = () => term.writeln("\x1b[90mVerbinde mit Proxmox-Konsole…\x1b[0m");
+    let keepalive: ReturnType<typeof setInterval> | undefined;
+
+    const sendResize = () => {
+      fit.fit();
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(encodeResize(term.cols, term.rows));
+      }
+    };
+
+    ws.onopen = () => {
+      term.writeln("\x1b[90mVerbinde mit Proxmox-Konsole…\x1b[0m");
+      sendResize();
+      // termproxy idle timeout ~5 min — keep alive with protocol ping "2"
+      keepalive = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) ws.send("2");
+      }, 30_000);
+    };
     ws.onmessage = (ev) => {
       if (typeof ev.data === "string") {
         term.write(ev.data);
@@ -58,10 +87,10 @@ export function TerminalModal() {
     };
 
     const onData = term.onData((data) => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(data);
+      if (ws.readyState === WebSocket.OPEN) ws.send(encodeInput(data));
     });
 
-    const onResize = () => fit.fit();
+    const onResize = () => sendResize();
     window.addEventListener("resize", onResize);
 
     const onKey = (e: KeyboardEvent) => {
@@ -69,10 +98,16 @@ export function TerminalModal() {
     };
     window.addEventListener("keydown", onKey);
 
+    const wrapEl = wrapRef.current;
+    const onPointer = () => term.focus();
+    wrapEl.addEventListener("pointerdown", onPointer);
+
     return () => {
       onData.dispose();
+      if (keepalive) clearInterval(keepalive);
       window.removeEventListener("resize", onResize);
       window.removeEventListener("keydown", onKey);
+      wrapEl.removeEventListener("pointerdown", onPointer);
       ws.close();
       term.dispose();
       termRef.current = null;
@@ -103,7 +138,11 @@ export function TerminalModal() {
             <X className="size-4" />
           </button>
         </div>
-        <div ref={wrapRef} className="min-h-0 flex-1 bg-bg p-2" />
+        <div
+          ref={wrapRef}
+          className="min-h-0 flex-1 cursor-text bg-bg p-2"
+          onClick={() => termRef.current?.focus()}
+        />
       </div>
     </div>
   );
