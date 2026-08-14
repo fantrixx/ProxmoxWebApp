@@ -19,5 +19,24 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("@xterm")) return "xterm";
+          if (id.includes("@tanstack")) return "query";
+          if (id.includes("lucide-react")) return "icons";
+          if (
+            id.includes("react-dom") ||
+            id.includes("react-router") ||
+            id.includes("/react/") ||
+            id.endsWith("\\react\\index.js") ||
+            id.endsWith("/react/index.js")
+          ) {
+            return "react-vendor";
+          }
+        },
+      },
+    },
   },
 });
