@@ -28,7 +28,7 @@ export function BackupPanel({
   vmid: string;
   name?: string;
 }) {
-  const { toast } = useApp();
+  const { toast, trackJob } = useApp();
   const qc = useQueryClient();
   const [storage, setStorage] = useState("");
   const [mode, setMode] = useState<"snapshot" | "suspend" | "stop">("snapshot");
@@ -68,8 +68,18 @@ export function BackupPanel({
         mode,
         compress,
       }),
-    onSuccess: () => {
-      toast("ok", "Backup started — see Tasks for progress.");
+    onSuccess: (res) => {
+      const label = name || `Guest ${vmid}`;
+      if (res.upid) {
+        trackJob({
+          kind: "backup",
+          title: `Backup · ${label}`,
+          detail: `${type === "lxc" ? "CT" : "VM"} ${vmid} → ${selectedStorage} · ${node}`,
+          node,
+          upid: res.upid,
+        });
+      }
+      toast("ok", "Backup started.");
       invalidate();
     },
     onError: (err: Error) => toast("err", err.message),
@@ -87,8 +97,18 @@ export function BackupPanel({
         force: restoreForce,
       });
     },
-    onSuccess: () => {
-      toast("ok", "Restore started — see Tasks for progress.");
+    onSuccess: (res) => {
+      const label = name || `Guest ${vmid}`;
+      if (res.upid) {
+        trackJob({
+          kind: "restore",
+          title: `Restore · ${label}`,
+          detail: `${type === "lxc" ? "CT" : "VM"} ${restoreVmid} · ${node}`,
+          node,
+          upid: res.upid,
+        });
+      }
+      toast("ok", "Restore started.");
       setRestoreTarget(null);
       invalidate();
     },

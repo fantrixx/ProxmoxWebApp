@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { dataApi } from "../api";
 import { formatBytes, formatSnapTime } from "../format";
 import { useApp } from "../context";
@@ -33,7 +33,7 @@ export function BackupDialog({
   vmid: number | string;
   name?: string;
 }) {
-  const { toast } = useApp();
+  const { toast, trackJob } = useApp();
   const qc = useQueryClient();
   const vmidStr = String(vmid);
   const [storage, setStorage] = useState("");
@@ -103,8 +103,18 @@ export function BackupDialog({
         mode,
         compress,
       }),
-    onSuccess: () => {
-      toast("ok", "Backup started — see Tasks for progress.");
+    onSuccess: (res) => {
+      const label = name || `Guest ${vmid}`;
+      if (res.upid) {
+        trackJob({
+          kind: "backup",
+          title: `Backup · ${label}`,
+          detail: `${type === "lxc" ? "CT" : "VM"} ${vmid} → ${selectedStorage} · ${node}`,
+          node,
+          upid: res.upid,
+        });
+      }
+      toast("ok", "Backup started.");
       void qc.invalidateQueries({ queryKey: ["guestBackups", node, type, vmidStr] });
       void qc.invalidateQueries({ queryKey: ["tasks"] });
       onClose();
@@ -137,35 +147,42 @@ export function BackupDialog({
             </button>
           </div>
 
-          <div className="group relative mt-3 inline-block">
-            <p
-              className="cursor-default text-sm text-muted underline decoration-dotted underline-offset-4"
-              tabIndex={0}
-            >
-              {backups.isLoading
-                ? "Checking backup locations…"
-                : locationCount === 0
-                  ? "No backup locations yet"
-                  : locationCount === 1
-                    ? "Backups on 1 location"
-                    : `Backups on ${locationCount} locations`}
-            </p>
-            {!backups.isLoading && locationCount > 0 ? (
-              <div
-                role="tooltip"
-                className="pointer-events-none absolute left-0 top-full z-10 mt-2 hidden min-w-[11rem] rounded-xl border border-line bg-bg px-3 py-2 text-xs shadow-xl group-hover:block group-focus-within:block"
-              >
-                <div className="mb-1.5 font-medium text-ink">Backup overview</div>
-                <ul className="space-y-1">
-                  {locationCounts.map(([store, count]) => (
-                    <li key={store} className="flex items-center justify-between gap-4 text-muted">
-                      <span className="truncate font-mono">{store}</span>
-                      <span className="shrink-0 tabular-nums text-ink">{count}</span>
-                    </li>
-                  ))}
-                </ul>
+          <div className="mt-3">
+            {backups.isLoading ? (
+              <p className="flex items-center gap-2 text-sm text-muted" aria-live="polite">
+                <Loader2 className="size-3.5 shrink-0 animate-spin text-accent" aria-hidden />
+                Checking backup locations…
+              </p>
+            ) : (
+              <div className="group relative inline-block">
+                <p
+                  className="cursor-default text-sm text-muted underline decoration-dotted underline-offset-4"
+                  tabIndex={0}
+                >
+                  {locationCount === 0
+                    ? "No backup locations yet"
+                    : locationCount === 1
+                      ? "Backups on 1 location"
+                      : `Backups on ${locationCount} locations`}
+                </p>
+                {locationCount > 0 ? (
+                  <div
+                    role="tooltip"
+                    className="pointer-events-none absolute left-0 top-full z-10 mt-2 hidden min-w-[11rem] rounded-xl border border-line bg-bg px-3 py-2 text-xs shadow-xl group-hover:block group-focus-within:block"
+                  >
+                    <div className="mb-1.5 font-medium text-ink">Backup overview</div>
+                    <ul className="space-y-1">
+                      {locationCounts.map(([store, count]) => (
+                        <li key={store} className="flex items-center justify-between gap-4 text-muted">
+                          <span className="truncate font-mono">{store}</span>
+                          <span className="shrink-0 tabular-nums text-ink">{count}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </div>
-            ) : null}
+            )}
           </div>
         </div>
 
@@ -243,7 +260,10 @@ export function BackupDialog({
               ) : null}
             </h3>
             {backups.isLoading ? (
-              <p className="text-sm text-muted">Loading backups…</p>
+              <p className="flex items-center gap-2 text-sm text-muted" aria-live="polite">
+                <Loader2 className="size-3.5 shrink-0 animate-spin text-accent" aria-hidden />
+                Loading backups…
+              </p>
             ) : backups.isError ? (
               <p className="text-sm text-bad">{(backups.error as Error).message}</p>
             ) : filteredList.length === 0 ? (

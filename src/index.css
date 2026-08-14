@@ -73,3 +73,12 @@ body {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+@keyframes job-indeterminate {
+  0% {
+    left: -40%;
+  }
+  100% {
+    left: 100%;
+  }
+}

@@ -46,6 +46,17 @@ export function guestLabel(type: string): string {
   return type === "lxc" ? "CT" : "VM";
 }
 
+export function formatDuration(seconds?: number): string {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return "—";
+  const s = Math.floor(seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}h ${m}m ${sec}s`;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${sec}s`;
+}
+
 export function formatSnapTime(epoch?: number): string {
   if (!epoch) return "—";
   return new Date(epoch * 1000).toLocaleString("en-US", {

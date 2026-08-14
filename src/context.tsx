@@ -14,12 +14,25 @@ export type Toast = {
   text: string;
 };
 
+export type ActiveJob = {
+  id: string;
+  kind: "backup" | "restore" | "task";
+  title: string;
+  detail: string;
+  node: string;
+  upid: string;
+  startedAt: number;
+};
+
 type AppContextValue = {
   user: AuthUser;
   openConsole: (t: ConsoleTarget) => void;
   toasts: Toast[];
   toast: (kind: Toast["kind"], text: string) => void;
   dismissToast: (id: string) => void;
+  jobs: ActiveJob[];
+  trackJob: (job: Omit<ActiveJob, "id" | "startedAt">) => string;
+  dismissJob: (id: string) => void;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -86,6 +99,7 @@ export function AppProvider({
   children: ReactNode;
 }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [jobs, setJobs] = useState<ActiveJob[]>([]);
 
   const toast = useCallback((kind: Toast["kind"], text: string) => {
     const id = crypto.randomUUID();
@@ -99,6 +113,19 @@ export function AppProvider({
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  const trackJob = useCallback((job: Omit<ActiveJob, "id" | "startedAt">) => {
+    const id = crypto.randomUUID();
+    setJobs((prev) => [
+      ...prev.filter((j) => j.upid !== job.upid),
+      { ...job, id, startedAt: Date.now() },
+    ]);
+    return id;
+  }, []);
+
+  const dismissJob = useCallback((id: string) => {
+    setJobs((prev) => prev.filter((j) => j.id !== id));
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -106,8 +133,11 @@ export function AppProvider({
       toasts,
       toast,
       dismissToast,
+      jobs,
+      trackJob,
+      dismissJob,
     }),
-    [user, toasts, toast, dismissToast],
+    [user, toasts, toast, dismissToast, jobs, trackJob, dismissJob],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

@@ -92,10 +92,6 @@ export default function TasksPage() {
     <div>
       <Header title="Tasks" subtitle={`${tasks.length} recent cluster tasks`} />
       <div className="space-y-4 px-4 py-4 md:px-8 md:py-6">
-        <p className="text-sm text-muted">
-          Long jobs like backups appear here. Click a row to view the task log.
-        </p>
-
         {q.isError ? (
           <p className="text-sm text-bad">{(q.error as Error).message}</p>
         ) : q.isLoading ? (
