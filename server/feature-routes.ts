@@ -187,6 +187,102 @@ function findCdromDrive(config: Record<string, unknown>): string | null {
   return null;
 }
 
+async function listRecentTasks(session: Session, limit = 50): Promise<
+  {
+    upid: string;
+    node?: string;
+    type?: string;
+    status?: string;
+    user?: string;
+    starttime?: number;
+    endtime?: number;
+    id?: string;
+  }[]
+> {
+  type TaskRow = {
+    upid: string;
+    node?: string;
+    type?: string;
+    status?: string;
+    user?: string;
+    starttime?: number;
+    endtime?: number;
+    id?: string;
+  };
+  const byUpid = new Map<string, TaskRow>();
+
+  const addRows = (rows: unknown) => {
+    if (!Array.isArray(rows)) return;
+    for (const row of rows) {
+      if (!row || typeof row !== "object") continue;
+      const task = row as TaskRow;
+      if (!task.upid) continue;
+      byUpid.set(task.upid, task);
+    }
+  };
+
+  try {
+    addRows(
+      await pveRequest(session, "GET", "/cluster/tasks", {
+        limit,
+      }),
+    );
+  } catch {
+    /* fall through to per-node */
+  }
+
+  // Always merge node tasks — cluster/tasks can be empty with limited tokens.
+  {
+    const nodes = await listNodes(session);
+    for (const node of nodes) {
+      try {
+        addRows(
+          await pveRequest(session, "GET", `/nodes/${encodeURIComponent(node)}/tasks`, {
+            limit,
+            source: "all",
+          }),
+        );
+      } catch {
+        /* skip node */
+      }
+    }
+  }
+
+  return [...byUpid.values()].sort(
+    (a, b) => (b.starttime || 0) - (a.starttime || 0),
+  );
+}
+
+async function findRecentGuestTask(
+  session: Session,
+  node: string,
+  typeHint: string,
+  vmid: string,
+): Promise<string | null> {
+  try {
+    const rows =
+      (await pveRequest<
+        { upid?: string; type?: string; id?: string; status?: string; starttime?: number }[]
+      >(session, "GET", `/nodes/${encodeURIComponent(node)}/tasks`, {
+        limit: 20,
+        source: "all",
+      })) || [];
+    const match = rows.find((t) => {
+      if (!t.upid) return false;
+      const idMatch = String(t.id || "") === String(vmid);
+      const type = String(t.type || "").toLowerCase();
+      const typeOk =
+        type === typeHint ||
+        type.includes(typeHint) ||
+        (typeHint === "vzdump" && type.includes("dump"));
+      return idMatch && typeOk;
+    });
+    return match?.upid || null;
+  } catch {
+    return null;
+  }
+}
+
 export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void {
   const { requireSession, sessionOf, param, sendError } = helpers;
 
@@ -194,26 +290,66 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
     try {
       const session = sessionOf(req);
       const limit = Number(req.query.limit ?? 50);
-      const tasks = await pveRequest(session, "GET", "/cluster/tasks", {
-        limit: Number.isFinite(limit) ? limit : 50,
-      });
-      res.json({ tasks: tasks || [] });
+      const tasks = await listRecentTasks(session, Number.isFinite(limit) ? limit : 50);
+      res.json({ tasks });
     } catch (err) {
       sendError(res, err);
     }
   });
 
-  app.get("/api/tasks/:node/:upid/status", requireSession, async (req, res) => {
+  app.get("/api/task-status", requireSession, async (req, res) => {
     try {
       const session = sessionOf(req);
-      const node = param(req.params.node);
-      const upid = param(req.params.upid);
+      const node = String(req.query.node || "");
+      const upid = String(req.query.upid || "");
+      if (!node || !upid) {
+        res.status(400).json({ error: "node and upid are required." });
+        return;
+      }
       const status = await pveRequest(
         session,
         "GET",
         `/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(upid)}/status`,
       );
-      res.json(status);
+      res.json(status ?? {});
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  app.get("/api/task-log", requireSession, async (req, res) => {
+    try {
+      const session = sessionOf(req);
+      const node = String(req.query.node || "");
+      const upid = String(req.query.upid || "");
+      if (!node || !upid) {
+        res.status(400).json({ error: "node and upid are required." });
+        return;
+      }
+      const log = await pveRequest(
+        session,
+        "GET",
+        `/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(upid)}/log`,
+        { start: 0, limit: 500 },
+      );
+      res.json({ log: log || [] });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  // Legacy path routes (UPIDs with colons break path matching — prefer query routes above).
+  app.get("/api/tasks/:node/:upid/status", requireSession, async (req, res) => {
+    try {
+      const session = sessionOf(req);
+      const node = param(req.params.node);
+      const upid = decodeURIComponent(param(req.params.upid));
+      const status = await pveRequest(
+        session,
+        "GET",
+        `/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(upid)}/status`,
+      );
+      res.json(status ?? {});
     } catch (err) {
       sendError(res, err);
     }
@@ -223,7 +359,7 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
     try {
       const session = sessionOf(req);
       const node = param(req.params.node);
-      const upid = param(req.params.upid);
+      const upid = decodeURIComponent(param(req.params.upid));
       const log = await pveRequest(
         session,
         "GET",
@@ -317,7 +453,20 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
             compress: compress || "zstd",
           },
         );
-        res.json({ ok: true, upid: unwrapUpid(raw) });
+        let upid = unwrapUpid(raw);
+        if (!upid) {
+          // Brief wait then resolve running vzdump task for this guest.
+          await new Promise((r) => setTimeout(r, 400));
+          upid = await findRecentGuestTask(session, node, "vzdump", vmid);
+        }
+        if (!upid) {
+          res.status(502).json({
+            error: "Backup request was accepted but no task id was returned by Proxmox.",
+            raw: raw ?? null,
+          });
+          return;
+        }
+        res.json({ ok: true, upid });
       } catch (err) {
         sendError(res, err);
       }

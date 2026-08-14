@@ -68,74 +68,87 @@ export function BackupPanel({
         mode,
         compress,
       }),
-    onMutate: () => {
-      const label = name || `Guest ${vmid}`;
-      const jobId = trackJob({
-        kind: "backup",
-        title: `Backup · ${label}`,
-        detail: `${type === "lxc" ? "CT" : "VM"} ${vmid} → ${selectedStorage} · ${node}`,
-        node,
-        upid: "",
-      });
-      return { jobId };
-    },
-    onSuccess: (res, _vars, ctx) => {
-      if (res.upid && ctx?.jobId) {
-        attachJobUpid(ctx.jobId, res.upid);
-      } else if (ctx?.jobId) {
-        dismissJob(ctx.jobId);
-        toast("err", "Backup started but no task id was returned.");
-        return;
-      }
-      toast("ok", "Backup started.");
-      invalidate();
-    },
-    onError: (err: Error, _vars, ctx) => {
-      if (ctx?.jobId) dismissJob(ctx.jobId);
-      toast("err", err.message);
-    },
   });
 
+  function handleStartBackup() {
+    if (!selectedStorage || start.isPending) return;
+    const label = name || `Guest ${vmid}`;
+    const jobId = trackJob({
+      kind: "backup",
+      title: `Backup · ${label}`,
+      detail: `${type === "lxc" ? "CT" : "VM"} ${vmid} → ${selectedStorage} · ${node}`,
+      node,
+      upid: "",
+      vmid,
+    });
+    start.mutate(undefined, {
+      onSuccess: (res) => {
+        if (res.upid) {
+          attachJobUpid(jobId, res.upid);
+          toast("ok", "Backup started.");
+        } else {
+          toast("err", "Backup started but no task id was returned.");
+        }
+        invalidate();
+      },
+      onError: (err: Error) => {
+        dismissJob(jobId);
+        toast("err", err.message);
+      },
+    });
+  }
+
   const restore = useMutation({
-    mutationFn: () => {
-      if (!restoreTarget) throw new Error("No backup selected.");
-      return dataApi.restoreBackup({
+    mutationFn: (vars: {
+      archive: string;
+      targetVmid: number;
+      storage?: string;
+      force: boolean;
+    }) =>
+      dataApi.restoreBackup({
         node,
         type,
-        vmid: Number(restoreVmid),
-        archive: restoreTarget.volid,
-        storage: restoreStorage.trim() || undefined,
-        force: restoreForce,
-      });
-    },
-    onMutate: () => {
-      const label = name || `Guest ${vmid}`;
-      const jobId = trackJob({
-        kind: "restore",
-        title: `Restore · ${label}`,
-        detail: `${type === "lxc" ? "CT" : "VM"} ${restoreVmid} · ${node}`,
-        node,
-        upid: "",
-      });
-      setRestoreTarget(null);
-      return { jobId };
-    },
-    onSuccess: (res, _vars, ctx) => {
-      if (res.upid && ctx?.jobId) {
-        attachJobUpid(ctx.jobId, res.upid);
-      } else if (ctx?.jobId) {
-        dismissJob(ctx.jobId);
-        toast("err", "Restore started but no task id was returned.");
-        return;
-      }
-      toast("ok", "Restore started.");
-      invalidate();
-    },
-    onError: (err: Error, _vars, ctx) => {
-      if (ctx?.jobId) dismissJob(ctx.jobId);
-      toast("err", err.message);
-    },
+        vmid: vars.targetVmid,
+        archive: vars.archive,
+        storage: vars.storage,
+        force: vars.force,
+      }),
   });
+
+  function handleRestore() {
+    if (!restoreTarget || restore.isPending) return;
+    const label = name || `Guest ${vmid}`;
+    const vars = {
+      archive: restoreTarget.volid,
+      targetVmid: Number(restoreVmid),
+      storage: restoreStorage.trim() || undefined,
+      force: restoreForce,
+    };
+    const jobId = trackJob({
+      kind: "restore",
+      title: `Restore · ${label}`,
+      detail: `${type === "lxc" ? "CT" : "VM"} ${restoreVmid} · ${node}`,
+      node,
+      upid: "",
+      vmid: String(restoreVmid),
+    });
+    setRestoreTarget(null);
+    restore.mutate(vars, {
+      onSuccess: (res) => {
+        if (res.upid) {
+          attachJobUpid(jobId, res.upid);
+          toast("ok", "Restore started.");
+        } else {
+          toast("err", "Restore started but no task id was returned.");
+        }
+        invalidate();
+      },
+      onError: (err: Error) => {
+        dismissJob(jobId);
+        toast("err", err.message);
+      },
+    });
+  }
 
   const remove = useMutation({
     mutationFn: () => {
@@ -165,7 +178,7 @@ export function BackupPanel({
         className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-end"
         onSubmit={(e) => {
           e.preventDefault();
-          start.mutate();
+          handleStartBackup();
         }}
       >
         <label>
@@ -320,7 +333,7 @@ export function BackupPanel({
               <button
                 type="button"
                 disabled={restore.isPending || !restoreVmid.trim()}
-                onClick={() => restore.mutate()}
+                onClick={() => handleRestore()}
                 className="min-h-11 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-black hover:bg-accent-2 disabled:opacity-40 sm:min-h-0 sm:py-1.5"
               >
                 {restore.isPending ? "Please wait…" : "Restore"}

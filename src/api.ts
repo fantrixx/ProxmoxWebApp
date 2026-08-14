@@ -140,11 +140,11 @@ export const dataApi = {
     ),
   taskStatus: (node: string, upid: string) =>
     api<Record<string, unknown>>(
-      `/api/tasks/${encodeURIComponent(node)}/${encodeURIComponent(upid)}/status`,
+      `/api/task-status?node=${encodeURIComponent(node)}&upid=${encodeURIComponent(upid)}`,
     ),
   taskLog: (node: string, upid: string) =>
     api<{ log: { n?: number; t?: string }[] }>(
-      `/api/tasks/${encodeURIComponent(node)}/${encodeURIComponent(upid)}/log`,
+      `/api/task-log?node=${encodeURIComponent(node)}&upid=${encodeURIComponent(upid)}`,
     ),
   mediaIsos: () => api<{ items: MediaItem[] }>("/api/media/isos"),
   mediaTemplates: () => api<{ items: MediaItem[] }>("/api/media/templates"),

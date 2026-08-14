@@ -103,35 +103,37 @@ export function BackupDialog({
         mode,
         compress,
       }),
-    onMutate: () => {
-      const label = name || `Guest ${vmid}`;
-      const jobId = trackJob({
-        kind: "backup",
-        title: `Backup · ${label}`,
-        detail: `${type === "lxc" ? "CT" : "VM"} ${vmid} → ${selectedStorage} · ${node}`,
-        node,
-        upid: "",
-      });
-      onClose();
-      return { jobId };
-    },
-    onSuccess: (res, _vars, ctx) => {
-      if (res.upid && ctx?.jobId) {
-        attachJobUpid(ctx.jobId, res.upid);
-      } else if (ctx?.jobId) {
-        dismissJob(ctx.jobId);
-        toast("err", "Backup started but no task id was returned.");
-        return;
-      }
-      toast("ok", "Backup started.");
-      void qc.invalidateQueries({ queryKey: ["guestBackups", node, type, vmidStr] });
-      void qc.invalidateQueries({ queryKey: ["tasks"] });
-    },
-    onError: (err: Error, _vars, ctx) => {
-      if (ctx?.jobId) dismissJob(ctx.jobId);
-      toast("err", err.message);
-    },
   });
+
+  function handleStart() {
+    if (!selectedStorage || start.isPending) return;
+    const label = name || `Guest ${vmid}`;
+    const jobId = trackJob({
+      kind: "backup",
+      title: `Backup · ${label}`,
+      detail: `${type === "lxc" ? "CT" : "VM"} ${vmid} → ${selectedStorage} · ${node}`,
+      node,
+      upid: "",
+      vmid: vmidStr,
+    });
+    onClose();
+    start.mutate(undefined, {
+      onSuccess: (res) => {
+        if (res.upid) {
+          attachJobUpid(jobId, res.upid);
+          toast("ok", "Backup started.");
+        } else {
+          toast("err", "Backup started but no task id was returned.");
+        }
+        void qc.invalidateQueries({ queryKey: ["guestBackups", node, type, vmidStr] });
+        void qc.invalidateQueries({ queryKey: ["tasks"] });
+      },
+      onError: (err: Error) => {
+        dismissJob(jobId);
+        toast("err", err.message);
+      },
+    });
+  }
 
   if (!open) return null;
 
@@ -203,8 +205,7 @@ export function BackupDialog({
             className="grid shrink-0 gap-3 sm:grid-cols-2"
             onSubmit={(e) => {
               e.preventDefault();
-              if (!selectedStorage) return;
-              start.mutate();
+              handleStart();
             }}
           >
             <label className="sm:col-span-2">

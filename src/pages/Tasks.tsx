@@ -86,7 +86,7 @@ export default function TasksPage() {
     refetchInterval: 3000,
   });
 
-  const tasks = q.data?.tasks || [];
+  const tasks = Array.isArray(q.data?.tasks) ? q.data.tasks : [];
 
   return (
     <div>

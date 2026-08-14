@@ -1,4 +1,4 @@
-import { useCallback, useContext, useMemo, useState, createContext, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState, createContext, type ReactNode } from "react";
 import type { AuthUser, GuestType } from "./types";
 
 export type ConsoleTarget = {
@@ -22,8 +22,33 @@ export type ActiveJob = {
   node: string;
   /** Empty while the Proxmox task id is not known yet. */
   upid: string;
+  vmid?: string;
   startedAt: number;
 };
+
+const JOBS_KEY = "proxpanel.activeJobs";
+
+function loadJobs(): ActiveJob[] {
+  try {
+    const raw = sessionStorage.getItem(JOBS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as ActiveJob[];
+    if (!Array.isArray(parsed)) return [];
+    // Drop stale jobs older than 6 hours.
+    const cutoff = Date.now() - 6 * 60 * 60 * 1000;
+    return parsed.filter((j) => j && j.id && j.startedAt >= cutoff);
+  } catch {
+    return [];
+  }
+}
+
+function saveJobs(jobs: ActiveJob[]) {
+  try {
+    sessionStorage.setItem(JOBS_KEY, JSON.stringify(jobs));
+  } catch {
+    /* ignore quota */
+  }
+}
 
 type AppContextValue = {
   user: AuthUser;
@@ -101,14 +126,18 @@ export function AppProvider({
   children: ReactNode;
 }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [jobs, setJobs] = useState<ActiveJob[]>([]);
+  const [jobs, setJobs] = useState<ActiveJob[]>(() => loadJobs());
+
+  useEffect(() => {
+    saveJobs(jobs);
+  }, [jobs]);
 
   const toast = useCallback((kind: Toast["kind"], text: string) => {
     const id = crypto.randomUUID();
     setToasts((prev) => [...prev, { id, kind, text }]);
     window.setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4200);
+    }, 5200);
   }, []);
 
   const dismissToast = useCallback((id: string) => {

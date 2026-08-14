@@ -43,7 +43,7 @@ type JobSnapshot = {
 };
 
 function useJobSnapshot(job: ActiveJob): JobSnapshot & { dismiss: () => void } {
-  const { dismissJob } = useApp();
+  const { dismissJob, attachJobUpid } = useApp();
   const qc = useQueryClient();
   const node = nodeFromUpid(job.upid, job.node);
   const pending = !job.upid;
@@ -55,10 +55,34 @@ function useJobSnapshot(job: ActiveJob): JobSnapshot & { dismiss: () => void } {
     return () => window.clearInterval(id);
   }, []);
 
+  // If UPID is missing, try to recover it from the recent task list.
+  const recoverQ = useQuery({
+    queryKey: ["tasks", "recover", job.id, job.vmid, job.node, job.kind],
+    queryFn: () => dataApi.tasks(30),
+    enabled: pending,
+    refetchInterval: pending ? 2000 : false,
+  });
+
+  useEffect(() => {
+    if (!pending || !recoverQ.data?.tasks?.length) return;
+    const hint = job.kind === "backup" ? "vzdump" : job.kind === "restore" ? "restore" : "";
+    const match = recoverQ.data.tasks.find((t) => {
+      if (!t.upid) return false;
+      if (job.vmid && String(t.id || "") !== String(job.vmid)) return false;
+      if (t.node && t.node !== job.node) return false;
+      const type = String(t.type || "").toLowerCase();
+      if (hint && !type.includes(hint) && type !== hint) return false;
+      const status = String(t.status || "").toLowerCase();
+      return status === "running" || !status;
+    });
+    if (match?.upid) attachJobUpid(job.id, match.upid);
+  }, [pending, recoverQ.data, job, attachJobUpid]);
+
   const statusQ = useQuery({
     queryKey: ["jobStatus", node, job.upid],
     queryFn: () => dataApi.taskStatus(node, job.upid),
     enabled: !pending,
+    retry: 2,
     refetchInterval: (q) => {
       const status = String(q.state.data?.status || "").toLowerCase();
       return status === "stopped" ? false : 2000;
@@ -67,13 +91,14 @@ function useJobSnapshot(job: ActiveJob): JobSnapshot & { dismiss: () => void } {
 
   const status = pending
     ? "running"
-    : String(statusQ.data?.status || (statusQ.isError ? "stopped" : "running")).toLowerCase();
+    : String(statusQ.data?.status || "running").toLowerCase();
   const running = pending || status !== "stopped";
   const exitstatus = String(statusQ.data?.exitstatus || "");
   const failed =
     !pending &&
-    (statusQ.isError ||
-      (!running && exitstatus.length > 0 && !/^ok$/i.test(exitstatus)));
+    !running &&
+    ((statusQ.isError && statusQ.failureCount > 2) ||
+      (exitstatus.length > 0 && !/^ok$/i.test(exitstatus)));
   const ok = !pending && !running && !failed;
 
   const logQ = useQuery({
@@ -105,12 +130,12 @@ function useJobSnapshot(job: ActiveJob): JobSnapshot & { dismiss: () => void } {
 
   useEffect(() => {
     if (pending || running || failed) return;
-    const id = window.setTimeout(() => dismissJob(job.id), 10000);
+    const id = window.setTimeout(() => dismissJob(job.id), 12000);
     return () => window.clearTimeout(id);
   }, [pending, running, failed, dismissJob, job.id]);
 
   const latestLog = pending
-    ? "Starting…"
+    ? "Starting backup task…"
     : [...(logQ.data?.log || [])].reverse().find((line) => (line.t || "").trim())?.t;
 
   return {
@@ -138,7 +163,7 @@ function ProgressBar({
   ok: boolean;
 }) {
   return (
-    <div className="h-1.5 overflow-hidden rounded-full bg-bg">
+    <div className="h-2.5 overflow-hidden rounded-full bg-bg">
       {progress == null && running ? (
         <div className="relative h-full w-full overflow-hidden">
           <div className="absolute inset-y-0 w-2/5 animate-[job-indeterminate_1.2s_ease-in-out_infinite] rounded-full bg-accent" />
@@ -156,9 +181,9 @@ function ProgressBar({
 }
 
 function StatusIcon({ running, failed }: { running: boolean; failed: boolean }) {
-  if (running) return <Loader2 className="size-4 shrink-0 animate-spin text-accent" aria-hidden />;
-  if (failed) return <XCircle className="size-4 shrink-0 text-bad" aria-hidden />;
-  return <CheckCircle2 className="size-4 shrink-0 text-good" aria-hidden />;
+  if (running) return <Loader2 className="size-5 shrink-0 animate-spin text-accent" aria-hidden />;
+  if (failed) return <XCircle className="size-5 shrink-0 text-bad" aria-hidden />;
+  return <CheckCircle2 className="size-5 shrink-0 text-good" aria-hidden />;
 }
 
 function JobRow({
@@ -176,35 +201,35 @@ function JobRow({
   const title = snapshot.running ? job.title : kindLabel(job.kind, phase);
 
   return (
-    <div className={compact ? "px-4 py-2.5 md:px-8" : "px-4 py-3 md:px-8"}>
-      <div className="flex items-start gap-2.5">
+    <div className={compact ? "px-4 py-3 md:px-8" : "px-4 py-4 md:px-8"}>
+      <div className="flex items-start gap-3">
         <div className="mt-0.5">
           <StatusIcon running={snapshot.running} failed={snapshot.failed} />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{title}</p>
-              <p className="truncate text-[11px] text-muted">{job.detail}</p>
+              <p className="truncate text-base font-semibold tracking-tight">{title}</p>
+              <p className="mt-0.5 truncate text-sm text-muted">{job.detail}</p>
             </div>
             <button
               type="button"
               onClick={onDismiss}
-              className="shrink-0 rounded-lg p-1 text-muted hover:bg-surface-2 hover:text-ink"
+              className="shrink-0 rounded-lg p-1.5 text-muted hover:bg-surface-2 hover:text-ink"
               aria-label="Dismiss"
             >
-              <X className="size-3.5" />
+              <X className="size-4" />
             </button>
           </div>
 
-          <div className="mt-2">
+          <div className="mt-3">
             <ProgressBar
               progress={snapshot.progress}
               running={snapshot.running}
               failed={snapshot.failed}
               ok={snapshot.ok}
             />
-            <div className="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-[11px] text-muted">
+            <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-xs text-muted">
               <span>
                 {snapshot.running
                   ? snapshot.progress != null
@@ -224,8 +249,8 @@ function JobRow({
             </div>
           </div>
 
-          {snapshot.latestLog && snapshot.running && !compact ? (
-            <p className="mt-1.5 truncate font-mono text-[10px] text-muted/90">
+          {snapshot.latestLog && snapshot.running ? (
+            <p className="mt-2 truncate font-mono text-[11px] text-muted/90">
               {snapshot.latestLog}
             </p>
           ) : null}
@@ -329,7 +354,7 @@ function MultiJobBanner({ jobs }: { jobs: ActiveJob[] }) {
   const allFailed = list.length === jobs.length && failedCount === jobs.length && !activeRunning;
 
   return (
-    <div className="border-t border-line bg-surface/90">
+    <div className="border-t border-accent/40 bg-surface-2">
       {!expanded
         ? jobs.map((job) => (
             <JobSnapshotSink key={job.id} job={job} onSnapshot={onSnapshot} />
@@ -339,13 +364,13 @@ function MultiJobBanner({ jobs }: { jobs: ActiveJob[] }) {
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left hover:bg-surface-2/40 md:px-8"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface/60 md:px-8"
         aria-expanded={expanded}
       >
         <StatusIcon running={activeRunning} failed={allFailed} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <p className="truncate text-sm font-medium">
+            <p className="truncate text-base font-semibold">
               {activeRunning
                 ? `${Math.max(runningCount, 1)} active job${
                     Math.max(runningCount, 1) === 1 ? "" : "s"
@@ -357,20 +382,20 @@ function MultiJobBanner({ jobs }: { jobs: ActiveJob[] }) {
                     } finished`}
             </p>
             {expanded ? (
-              <ChevronDown className="size-3.5 shrink-0 text-muted" />
+              <ChevronDown className="size-4 shrink-0 text-muted" />
             ) : (
-              <ChevronRight className="size-3.5 shrink-0 text-muted" />
+              <ChevronRight className="size-4 shrink-0 text-muted" />
             )}
           </div>
           {!expanded ? (
-            <div className="mt-1.5">
+            <div className="mt-2">
               <ProgressBar
                 progress={avgProgress}
                 running={activeRunning}
                 failed={allFailed}
                 ok={!activeRunning && !allFailed}
               />
-              <p className="mt-1 truncate text-[11px] text-muted">
+              <p className="mt-1.5 truncate text-xs text-muted">
                 {jobs[0]?.title}
                 {jobs.length > 1 ? ` · +${jobs.length - 1} more` : ""}
               </p>
@@ -380,7 +405,7 @@ function MultiJobBanner({ jobs }: { jobs: ActiveJob[] }) {
         <Link
           to="/tasks"
           onClick={(e) => e.stopPropagation()}
-          className="shrink-0 text-[11px] font-medium text-accent hover:underline"
+          className="shrink-0 text-xs font-medium text-accent hover:underline"
         >
           Tasks
         </Link>
@@ -399,10 +424,10 @@ function MultiJobBanner({ jobs }: { jobs: ActiveJob[] }) {
 
 function SingleJobBanner({ job }: { job: ActiveJob }) {
   return (
-    <div className="border-t border-line bg-surface/90">
+    <div className="border-t border-accent/40 bg-surface-2">
       <JobItem job={job} />
-      <div className="border-t border-line px-4 py-1.5 md:px-8">
-        <Link to="/tasks" className="text-[11px] font-medium text-accent hover:underline">
+      <div className="border-t border-line px-4 py-2 md:px-8">
+        <Link to="/tasks" className="text-xs font-medium text-accent hover:underline">
           Open Tasks
         </Link>
       </div>
@@ -410,7 +435,7 @@ function SingleJobBanner({ job }: { job: ActiveJob }) {
   );
 }
 
-/** Progress strip shown directly under the page header. */
+/** Full-width progress strip shown directly under the page header. */
 export function ActiveJobsBanner() {
   const { jobs } = useApp();
   if (!jobs.length) return null;
