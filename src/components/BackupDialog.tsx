@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Loader2, X } from "lucide-react";
 import { dataApi } from "../api";
@@ -33,12 +33,13 @@ export function BackupDialog({
   vmid: number | string;
   name?: string;
 }) {
-  const { toast, trackJob, attachJobUpid, dismissJob } = useApp();
+  const { toast, startGuestBackup } = useApp();
   const qc = useQueryClient();
   const vmidStr = String(vmid);
   const [storage, setStorage] = useState("");
   const [mode, setMode] = useState<"snapshot" | "suspend" | "stop">("snapshot");
   const [compress, setCompress] = useState<"zstd" | "gzip" | "lzo" | "none">("zstd");
+  const [starting, setStarting] = useState(false);
 
   const storages = useQuery({
     queryKey: ["backupStorages"],
@@ -96,43 +97,29 @@ export function BackupDialog({
     [allBackups, selectedStorage],
   );
 
-  const start = useMutation({
-    mutationFn: () =>
-      dataApi.startBackup(node, type, vmidStr, {
-        storage: selectedStorage,
-        mode,
-        compress,
-      }),
-  });
-
-  function handleStart() {
-    if (!selectedStorage || start.isPending) return;
-    const label = name || `Guest ${vmid}`;
-    const jobId = trackJob({
-      kind: "backup",
-      title: `Backup · ${label}`,
-      detail: `${type === "lxc" ? "CT" : "VM"} ${vmid} → ${selectedStorage} · ${node}`,
+  async function handleStart() {
+    if (!selectedStorage || starting) {
+      if (!selectedStorage) toast("err", "Select a backup storage first.");
+      return;
+    }
+    const opts = {
       node,
-      upid: "",
+      type,
       vmid: vmidStr,
-    });
+      name,
+      storage: selectedStorage,
+      mode,
+      compress,
+    };
+    setStarting(true);
     onClose();
-    start.mutate(undefined, {
-      onSuccess: (res) => {
-        if (res.upid) {
-          attachJobUpid(jobId, res.upid);
-          toast("ok", "Backup started.");
-        } else {
-          toast("err", "Backup started but no task id was returned.");
-        }
-        void qc.invalidateQueries({ queryKey: ["guestBackups", node, type, vmidStr] });
-        void qc.invalidateQueries({ queryKey: ["tasks"] });
-      },
-      onError: (err: Error) => {
-        dismissJob(jobId);
-        toast("err", err.message);
-      },
-    });
+    try {
+      await startGuestBackup(opts);
+      void qc.invalidateQueries({ queryKey: ["guestBackups", node, type, vmidStr] });
+      void qc.invalidateQueries({ queryKey: ["tasks"] });
+    } finally {
+      setStarting(false);
+    }
   }
 
   if (!open) return null;
@@ -205,7 +192,7 @@ export function BackupDialog({
             className="grid shrink-0 gap-3 sm:grid-cols-2"
             onSubmit={(e) => {
               e.preventDefault();
-              handleStart();
+              void handleStart();
             }}
           >
             <label className="sm:col-span-2">
@@ -314,19 +301,19 @@ export function BackupDialog({
         <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-line px-5 py-4 sm:flex-row sm:justify-end">
           <button
             type="button"
-            disabled={start.isPending}
+            disabled={starting}
             onClick={onClose}
             className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm hover:bg-surface-2 disabled:opacity-40 sm:min-h-0"
           >
             Cancel
           </button>
           <button
-            type="submit"
-            form="backup-dialog-form"
-            disabled={start.isPending || !selectedStorage}
+            type="button"
+            disabled={starting || !selectedStorage}
+            onClick={() => void handleStart()}
             className="min-h-11 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-black hover:bg-accent-2 disabled:opacity-40 sm:min-h-0"
           >
-            {start.isPending ? "Starting…" : "Start backup"}
+            {starting ? "Starting…" : "Start backup"}
           </button>
         </div>
       </div>

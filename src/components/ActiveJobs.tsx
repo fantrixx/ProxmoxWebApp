@@ -46,7 +46,7 @@ function useJobSnapshot(job: ActiveJob): JobSnapshot & { dismiss: () => void } {
   const { dismissJob, attachJobUpid } = useApp();
   const qc = useQueryClient();
   const node = nodeFromUpid(job.upid, job.node);
-  const pending = !job.upid;
+  const pending = !job.upid && !job.error;
   const [now, setNow] = useState(Date.now());
   const [doneAt, setDoneAt] = useState<number | null>(null);
 
@@ -55,7 +55,6 @@ function useJobSnapshot(job: ActiveJob): JobSnapshot & { dismiss: () => void } {
     return () => window.clearInterval(id);
   }, []);
 
-  // If UPID is missing, try to recover it from the recent task list.
   const recoverQ = useQuery({
     queryKey: ["tasks", "recover", job.id, job.vmid, job.node, job.kind],
     queryFn: () => dataApi.tasks(30),
@@ -81,7 +80,7 @@ function useJobSnapshot(job: ActiveJob): JobSnapshot & { dismiss: () => void } {
   const statusQ = useQuery({
     queryKey: ["jobStatus", node, job.upid],
     queryFn: () => dataApi.taskStatus(node, job.upid),
-    enabled: !pending,
+    enabled: Boolean(job.upid) && !job.error,
     retry: 2,
     refetchInterval: (q) => {
       const status = String(q.state.data?.status || "").toLowerCase();
@@ -89,23 +88,26 @@ function useJobSnapshot(job: ActiveJob): JobSnapshot & { dismiss: () => void } {
     },
   });
 
-  const status = pending
-    ? "running"
+  const status = pending || job.error
+    ? job.error
+      ? "stopped"
+      : "running"
     : String(statusQ.data?.status || "running").toLowerCase();
-  const running = pending || status !== "stopped";
-  const exitstatus = String(statusQ.data?.exitstatus || "");
+  const running = !job.error && (pending || status !== "stopped");
+  const exitstatus = job.error || String(statusQ.data?.exitstatus || "");
   const failed =
-    !pending &&
-    !running &&
-    ((statusQ.isError && statusQ.failureCount > 2) ||
-      (exitstatus.length > 0 && !/^ok$/i.test(exitstatus)));
+    Boolean(job.error) ||
+    (!pending &&
+      !running &&
+      ((statusQ.isError && statusQ.failureCount > 2) ||
+        (exitstatus.length > 0 && !/^ok$/i.test(exitstatus))));
   const ok = !pending && !running && !failed;
 
   const logQ = useQuery({
     queryKey: ["jobLog", node, job.upid],
     queryFn: () => dataApi.taskLog(node, job.upid),
-    enabled: !pending && (running || failed),
-    refetchInterval: !pending && running ? 2500 : false,
+    enabled: Boolean(job.upid) && (running || failed) && !job.error,
+    refetchInterval: running ? 2500 : false,
   });
 
   const progress = pending
@@ -134,9 +136,11 @@ function useJobSnapshot(job: ActiveJob): JobSnapshot & { dismiss: () => void } {
     return () => window.clearTimeout(id);
   }, [pending, running, failed, dismissJob, job.id]);
 
-  const latestLog = pending
-    ? "Starting backup task…"
-    : [...(logQ.data?.log || [])].reverse().find((line) => (line.t || "").trim())?.t;
+  const latestLog = job.error
+    ? job.error
+    : pending
+      ? "Starting backup task…"
+      : [...(logQ.data?.log || [])].reverse().find((line) => (line.t || "").trim())?.t;
 
   return {
     running,
@@ -249,8 +253,12 @@ function JobRow({
             </div>
           </div>
 
-          {snapshot.latestLog && snapshot.running ? (
-            <p className="mt-2 truncate font-mono text-[11px] text-muted/90">
+          {snapshot.latestLog && (snapshot.running || snapshot.failed) ? (
+            <p
+              className={`mt-2 truncate font-mono text-[11px] ${
+                snapshot.failed ? "text-bad" : "text-muted/90"
+              }`}
+            >
               {snapshot.latestLog}
             </p>
           ) : null}

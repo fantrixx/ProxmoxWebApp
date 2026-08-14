@@ -28,7 +28,7 @@ export function BackupPanel({
   vmid: string;
   name?: string;
 }) {
-  const { toast, trackJob, attachJobUpid, dismissJob } = useApp();
+  const { toast, trackJob, attachJobUpid, failJob, startGuestBackup } = useApp();
   const qc = useQueryClient();
   const [storage, setStorage] = useState("");
   const [mode, setMode] = useState<"snapshot" | "suspend" | "stop">("snapshot");
@@ -62,40 +62,26 @@ export function BackupPanel({
   }
 
   const start = useMutation({
-    mutationFn: () =>
-      dataApi.startBackup(node, type, vmid, {
+    mutationFn: async () => {
+      await startGuestBackup({
+        node,
+        type,
+        vmid,
+        name,
         storage: selectedStorage,
         mode,
         compress,
-      }),
+      });
+    },
+    onSuccess: () => invalidate(),
   });
 
   function handleStartBackup() {
-    if (!selectedStorage || start.isPending) return;
-    const label = name || `Guest ${vmid}`;
-    const jobId = trackJob({
-      kind: "backup",
-      title: `Backup · ${label}`,
-      detail: `${type === "lxc" ? "CT" : "VM"} ${vmid} → ${selectedStorage} · ${node}`,
-      node,
-      upid: "",
-      vmid,
-    });
-    start.mutate(undefined, {
-      onSuccess: (res) => {
-        if (res.upid) {
-          attachJobUpid(jobId, res.upid);
-          toast("ok", "Backup started.");
-        } else {
-          toast("err", "Backup started but no task id was returned.");
-        }
-        invalidate();
-      },
-      onError: (err: Error) => {
-        dismissJob(jobId);
-        toast("err", err.message);
-      },
-    });
+    if (!selectedStorage || start.isPending) {
+      if (!selectedStorage) toast("err", "Select a backup storage first.");
+      return;
+    }
+    start.mutate();
   }
 
   const restore = useMutation({
@@ -139,12 +125,13 @@ export function BackupPanel({
           attachJobUpid(jobId, res.upid);
           toast("ok", "Restore started.");
         } else {
+          failJob(jobId, "No task id returned by Proxmox.");
           toast("err", "Restore started but no task id was returned.");
         }
         invalidate();
       },
       onError: (err: Error) => {
-        dismissJob(jobId);
+        failJob(jobId, err.message);
         toast("err", err.message);
       },
     });

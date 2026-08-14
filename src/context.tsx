@@ -1,4 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useState, createContext, type ReactNode } from "react";
+import { dataApi } from "./api";
 import type { AuthUser, GuestType } from "./types";
 
 export type ConsoleTarget = {
@@ -24,6 +25,7 @@ export type ActiveJob = {
   upid: string;
   vmid?: string;
   startedAt: number;
+  error?: string;
 };
 
 const JOBS_KEY = "proxpanel.activeJobs";
@@ -59,7 +61,17 @@ type AppContextValue = {
   jobs: ActiveJob[];
   trackJob: (job: Omit<ActiveJob, "id" | "startedAt">) => string;
   attachJobUpid: (id: string, upid: string) => void;
+  failJob: (id: string, error: string) => void;
   dismissJob: (id: string) => void;
+  startGuestBackup: (opts: {
+    node: string;
+    type: GuestType;
+    vmid: string;
+    name?: string;
+    storage: string;
+    mode?: "snapshot" | "suspend" | "stop";
+    compress?: "zstd" | "gzip" | "lzo" | "none";
+  }) => Promise<void>;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -144,6 +156,22 @@ export function AppProvider({
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  const attachJobUpid = useCallback((id: string, upid: string) => {
+    setJobs((prev) =>
+      prev.map((j) => (j.id === id ? { ...j, upid, error: undefined } : j)),
+    );
+  }, []);
+
+  const failJob = useCallback((id: string, error: string) => {
+    setJobs((prev) =>
+      prev.map((j) => (j.id === id ? { ...j, error } : j)),
+    );
+  }, []);
+
+  const dismissJob = useCallback((id: string) => {
+    setJobs((prev) => prev.filter((j) => j.id !== id));
+  }, []);
+
   const trackJob = useCallback((job: Omit<ActiveJob, "id" | "startedAt">) => {
     const id = crypto.randomUUID();
     setJobs((prev) => {
@@ -153,15 +181,46 @@ export function AppProvider({
     return id;
   }, []);
 
-  const attachJobUpid = useCallback((id: string, upid: string) => {
-    setJobs((prev) =>
-      prev.map((j) => (j.id === id ? { ...j, upid } : j)),
-    );
-  }, []);
-
-  const dismissJob = useCallback((id: string) => {
-    setJobs((prev) => prev.filter((j) => j.id !== id));
-  }, []);
+  const startGuestBackup = useCallback(
+    async (opts: {
+      node: string;
+      type: GuestType;
+      vmid: string;
+      name?: string;
+      storage: string;
+      mode?: "snapshot" | "suspend" | "stop";
+      compress?: "zstd" | "gzip" | "lzo" | "none";
+    }) => {
+      const label = opts.name || `Guest ${opts.vmid}`;
+      const jobId = trackJob({
+        kind: "backup",
+        title: `Backup · ${label}`,
+        detail: `${opts.type === "lxc" ? "CT" : "VM"} ${opts.vmid} → ${opts.storage} · ${opts.node}`,
+        node: opts.node,
+        upid: "",
+        vmid: opts.vmid,
+      });
+      try {
+        const res = await dataApi.startBackup(opts.node, opts.type, opts.vmid, {
+          storage: opts.storage,
+          mode: opts.mode,
+          compress: opts.compress,
+        });
+        if (res.upid) {
+          attachJobUpid(jobId, res.upid);
+          toast("ok", "Backup started.");
+        } else {
+          failJob(jobId, "No task id returned by Proxmox.");
+          toast("err", "Backup started but no task id was returned.");
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Backup failed.";
+        failJob(jobId, message);
+        toast("err", message);
+      }
+    },
+    [trackJob, attachJobUpid, failJob, toast],
+  );
 
   const value = useMemo(
     () => ({
@@ -173,9 +232,22 @@ export function AppProvider({
       jobs,
       trackJob,
       attachJobUpid,
+      failJob,
       dismissJob,
+      startGuestBackup,
     }),
-    [user, toasts, toast, dismissToast, jobs, trackJob, attachJobUpid, dismissJob],
+    [
+      user,
+      toasts,
+      toast,
+      dismissToast,
+      jobs,
+      trackJob,
+      attachJobUpid,
+      failJob,
+      dismissJob,
+      startGuestBackup,
+    ],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

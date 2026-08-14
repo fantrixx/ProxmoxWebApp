@@ -151,11 +151,14 @@ export async function pveRequest<T = unknown>(
   if (!res.ok) {
     const extra =
       json.errors && typeof json.errors === "object"
-        ? Object.values(json.errors as Record<string, string>).join(" ")
+        ? Object.entries(json.errors as Record<string, string>)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join("; ")
         : "";
+    const parts = [json.message, extra].filter((s) => typeof s === "string" && s.trim());
     throw new ProxmoxApiError(
       res.status,
-      json.message || extra || `Proxmox error (${res.status})`,
+      parts.join(" — ") || `Proxmox error (${res.status})`,
       json,
     );
   }

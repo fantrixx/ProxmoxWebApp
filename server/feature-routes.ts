@@ -447,7 +447,8 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
           "POST",
           `/nodes/${encodeURIComponent(node)}/vzdump`,
           {
-            vmid: Number(vmid),
+            // Proxmox expects vmid as string (guest id list).
+            vmid: String(vmid),
             storage,
             mode: mode || "snapshot",
             compress: compress || "zstd",
@@ -456,12 +457,16 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
         let upid = unwrapUpid(raw);
         if (!upid) {
           // Brief wait then resolve running vzdump task for this guest.
-          await new Promise((r) => setTimeout(r, 400));
+          await new Promise((r) => setTimeout(r, 600));
           upid = await findRecentGuestTask(session, node, "vzdump", vmid);
+        }
+        if (!upid && typeof raw === "string" && raw.startsWith("UPID:")) {
+          upid = raw;
         }
         if (!upid) {
           res.status(502).json({
-            error: "Backup request was accepted but no task id was returned by Proxmox.",
+            error:
+              "Proxmox did not return a backup task id. Check VM.Backup permission and that the storage supports backups.",
             raw: raw ?? null,
           });
           return;

@@ -6,10 +6,108 @@ import { Header } from "../components/Header";
 import { formatSnapTime } from "../format";
 import type { PveTask } from "../types";
 
-function nodeFromUpid(upid: string, fallback?: string): string {
-  if (fallback) return fallback;
-  if (upid.startsWith("UPID:")) return upid.split(":")[1] || "?";
-  return "?";
+/** UPID:<node>:<pid>:<pstart>:<starttime>:<type>:<id>:<user> */
+function parseUpid(upid: string): {
+  node?: string;
+  type?: string;
+  id?: string;
+  user?: string;
+} {
+  if (!upid.startsWith("UPID:")) return {};
+  const parts = upid.split(":");
+  return {
+    node: parts[1],
+    type: parts[5],
+    id: parts[6] || undefined,
+    user: parts.slice(7).join(":").replace(/:$/, "") || undefined,
+  };
+}
+
+function taskTypeLabel(type?: string): string {
+  switch ((type || "").toLowerCase()) {
+    case "vzdump":
+      return "Backup";
+    case "qmrestore":
+      return "Restore VM";
+    case "vzrestore":
+      return "Restore CT";
+    case "qmstart":
+      return "Start VM";
+    case "qmstop":
+      return "Stop VM";
+    case "qmshutdown":
+      return "Shutdown VM";
+    case "qmreboot":
+    case "qmreset":
+      return "Reboot VM";
+    case "qmsuspend":
+      return "Suspend VM";
+    case "qmresume":
+      return "Resume VM";
+    case "vzstart":
+      return "Start CT";
+    case "vzstop":
+      return "Stop CT";
+    case "vzshutdown":
+      return "Shutdown CT";
+    case "vzreboot":
+      return "Reboot CT";
+    case "qmsnapshot":
+    case "vzsnapshot":
+      return "Snapshot";
+    case "qmdelsnapshot":
+    case "vzdelsnapshot":
+      return "Delete snapshot";
+    case "qmrollback":
+    case "vzrollback":
+      return "Rollback";
+    case "imgcopy":
+    case "qmclone":
+    case "vzclone":
+      return "Clone";
+    case "qmmove":
+    case "vzmove":
+      return "Move disk";
+    case "aptupdate":
+      return "Update packages";
+    case "startall":
+      return "Start all";
+    case "stopall":
+      return "Stop all";
+    case "migrate":
+    case "qmigrate":
+      return "Migrate";
+    default:
+      return type ? type.replace(/^qm/, "VM ").replace(/^vz/, "CT ") : "Task";
+  }
+}
+
+function taskHeadline(task: PveTask): { title: string; subtitle: string } {
+  const parsed = parseUpid(task.upid);
+  const type = task.type || parsed.type;
+  const id = task.id || parsed.id;
+  const node = task.node || parsed.node || "?";
+  const user = task.user || parsed.user;
+  const label = taskTypeLabel(type);
+  const target =
+    id && id !== "-"
+      ? /^\d+$/.test(id)
+        ? `guest ${id}`
+        : id
+      : null;
+
+  const title = target ? `${label} · ${target}` : label;
+  const bits = [node];
+  if (user) bits.push(user);
+  return { title, subtitle: bits.join(" · ") };
+}
+
+function displayStatus(task: PveTask): string {
+  const s = (task.status || "").toLowerCase();
+  if (s === "running") return "running";
+  if (s === "ok" || s === "stopped") return "OK";
+  if (!s) return "unknown";
+  return task.status || "unknown";
 }
 
 function taskStatusTone(status?: string): string {
@@ -50,8 +148,10 @@ function TaskLog({ node, upid }: { node: string; upid: string }) {
 
 function TaskRow({ task }: { task: PveTask }) {
   const [open, setOpen] = useState(false);
-  const node = nodeFromUpid(task.upid, task.node);
-  const status = task.status || "unknown";
+  const parsed = parseUpid(task.upid);
+  const node = task.node || parsed.node || "?";
+  const status = displayStatus(task);
+  const { title, subtitle } = taskHeadline(task);
 
   return (
     <div className="rounded-xl border border-line bg-surface">
@@ -65,14 +165,16 @@ function TaskRow({ task }: { task: PveTask }) {
         ) : (
           <ChevronRight className="size-4 shrink-0 text-muted" />
         )}
-        <span className="min-w-0 flex-1 truncate font-medium">{task.type || "task"}</span>
-        <span className="hidden font-mono text-xs text-muted sm:inline">
-          {task.id || "—"}
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-medium">{title}</div>
+          <div className="truncate text-[11px] text-muted">{subtitle}</div>
+        </div>
+        <span className={`shrink-0 text-xs font-medium ${taskStatusTone(task.status)}`}>
+          {status}
         </span>
-        <span className="hidden text-xs text-muted md:inline">{node}</span>
-        <span className="hidden text-xs text-muted lg:inline">{task.user || "—"}</span>
-        <span className={`text-xs font-medium ${taskStatusTone(status)}`}>{status}</span>
-        <span className="text-xs text-muted">{formatSnapTime(task.starttime)}</span>
+        <span className="hidden shrink-0 text-xs text-muted sm:inline">
+          {formatSnapTime(task.starttime)}
+        </span>
       </button>
       {open ? <TaskLog node={node} upid={task.upid} /> : null}
     </div>
@@ -90,7 +192,7 @@ export default function TasksPage() {
 
   return (
     <div>
-      <Header title="Tasks" subtitle={`${tasks.length} recent cluster tasks`} />
+      <Header title="Tasks" subtitle={`${tasks.length} recent tasks`} />
       <div className="space-y-4 px-4 py-4 md:px-8 md:py-6">
         {q.isError ? (
           <p className="text-sm text-bad">{(q.error as Error).message}</p>
@@ -100,15 +202,6 @@ export default function TasksPage() {
           <p className="text-sm text-muted">No tasks found.</p>
         ) : (
           <div className="space-y-2">
-            <div className="hidden px-4 text-[11px] uppercase tracking-wide text-muted sm:grid sm:grid-cols-[auto_1fr_auto_auto_auto_auto_auto] sm:items-center sm:gap-3">
-              <span className="w-4" />
-              <span>Type</span>
-              <span>ID</span>
-              <span className="hidden md:inline">Node</span>
-              <span className="hidden lg:inline">User</span>
-              <span>Status</span>
-              <span>Started</span>
-            </div>
             {tasks.map((task) => (
               <TaskRow key={task.upid} task={task} />
             ))}
