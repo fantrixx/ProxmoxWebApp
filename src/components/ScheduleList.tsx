@@ -85,7 +85,7 @@ export function ScheduleEmptyState({ onAdd }: { onAdd: () => void }) {
       <button
         type="button"
         onClick={onAdd}
-        className="mt-4 rounded-lg bg-accent px-3.5 py-2 text-xs font-medium text-black hover:bg-accent-2"
+        className="mt-4 inline-flex min-h-11 items-center rounded-lg bg-accent px-4 py-2 text-sm font-medium text-black hover:bg-accent-2 sm:min-h-0 sm:px-3.5 sm:py-2 sm:text-xs"
       >
         Add schedule
       </button>
@@ -116,7 +116,7 @@ export function ScheduleRow({
           : "border-line/70 bg-bg/20 opacity-75"
       }`}
     >
-      <div className="flex items-stretch gap-2 p-3">
+      <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-stretch sm:gap-2">
         <button
           type="button"
           disabled={busy}
@@ -159,7 +159,7 @@ export function ScheduleRow({
           </div>
         </button>
 
-        <div className="flex shrink-0 flex-col items-center justify-between gap-1 py-0.5">
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-line/70 pt-2 sm:flex-col sm:items-center sm:justify-between sm:border-t-0 sm:pt-0.5">
           <button
             type="button"
             role="switch"
@@ -167,30 +167,25 @@ export function ScheduleRow({
             aria-label={enabled ? "Disable schedule" : "Enable schedule"}
             disabled={busy}
             onClick={onToggle}
-            className={`relative h-6 w-10 rounded-full transition disabled:opacity-40 ${
-              enabled ? "bg-accent" : "bg-white/15"
-            }`}
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg disabled:opacity-40 sm:min-h-0 sm:min-w-0"
           >
             <span
-              className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition ${
-                enabled ? "left-4" : "left-0.5"
+              className={`relative block h-7 w-12 rounded-full transition ${
+                enabled ? "bg-accent" : "bg-white/15"
               }`}
-            />
-          </button>
-          <div className="flex gap-1">
-            <IconBtn
-              label="Edit schedule"
-              disabled={busy}
-              onClick={onEdit}
             >
+              <span
+                className={`absolute top-0.5 size-6 rounded-full bg-white shadow transition ${
+                  enabled ? "left-[1.35rem]" : "left-0.5"
+                }`}
+              />
+            </span>
+          </button>
+          <div className="flex gap-1.5">
+            <IconBtn label="Edit schedule" disabled={busy} onClick={onEdit}>
               <Pencil className="size-3.5" />
             </IconBtn>
-            <IconBtn
-              label="Delete schedule"
-              danger
-              disabled={busy}
-              onClick={onDelete}
-            >
+            <IconBtn label="Delete schedule" danger disabled={busy} onClick={onDelete}>
               <Trash2 className="size-3.5" />
             </IconBtn>
           </div>
@@ -220,7 +215,7 @@ function IconBtn({
       title={label}
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex size-8 items-center justify-center rounded-lg border transition disabled:opacity-40 ${
+      className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border transition disabled:opacity-40 sm:size-8 sm:min-h-0 sm:min-w-0 ${
         danger
           ? "border-bad/30 text-bad hover:bg-bad/10"
           : "border-line text-muted hover:bg-surface-2 hover:text-ink"

@@ -159,7 +159,7 @@ export function SchedulePanel({
           <button
             type="button"
             onClick={openCreate}
-            className="rounded-lg border border-line px-3 py-1.5 text-xs hover:bg-surface-2"
+            className="min-h-11 rounded-lg border border-line px-3 py-1.5 text-xs hover:bg-surface-2 sm:min-h-0"
           >
             Add schedule
           </button>
@@ -211,7 +211,7 @@ export function SchedulePanel({
                     action: e.target.value as PowerSchedule["action"],
                   }))
                 }
-                className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-sm outline-none focus:border-accent"
+                className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-base outline-none focus:border-accent md:text-sm"
               >
                 <option value="start">Start</option>
                 <option value="shutdown">Shut down</option>
@@ -224,7 +224,7 @@ export function SchedulePanel({
                 type="time"
                 value={form.time}
                 onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))}
-                className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-sm outline-none focus:border-accent"
+                className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-base outline-none focus:border-accent md:text-sm"
                 required
               />
             </label>
@@ -312,7 +312,7 @@ function DayChip({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-lg border px-2.5 py-1 text-xs ${
+      className={`min-h-11 rounded-lg border px-3 py-1 text-xs sm:min-h-0 sm:px-2.5 ${
         active
           ? "border-accent bg-accent/15 text-accent"
           : "border-line text-muted hover:bg-surface-2"

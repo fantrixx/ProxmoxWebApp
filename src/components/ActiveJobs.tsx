@@ -219,7 +219,7 @@ function JobRow({
             <button
               type="button"
               onClick={onDismiss}
-              className="shrink-0 rounded-lg p-1.5 text-muted hover:bg-surface-2 hover:text-ink"
+              className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-ink sm:min-h-0 sm:min-w-0 sm:p-1.5"
               aria-label="Dismiss"
             >
               <X className="size-4" />

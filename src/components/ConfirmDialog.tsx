@@ -26,7 +26,7 @@ export function ConfirmDialog({
   }, [busy, onCancel]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center sm:p-6">
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:items-center sm:p-6">
       <div className="w-full max-w-md rounded-2xl border border-line bg-surface p-5 shadow-2xl">
         <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
         <p className="mt-2 text-sm leading-relaxed text-muted">{body}</p>

@@ -177,7 +177,7 @@ export function ScheduleDialog({
   const activeCount = guestSchedules.filter((s) => s.enabled).length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center sm:p-6">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:items-center sm:p-6">
       <div className="flex h-[min(90dvh,820px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl">
         <div className="shrink-0 border-b border-line px-5 py-4">
           <div className="flex items-start justify-between gap-3">
@@ -220,7 +220,7 @@ export function ScheduleDialog({
                   <button
                     type="button"
                     onClick={openCreate}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-black hover:bg-accent-2"
+                    className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-black hover:bg-accent-2 sm:min-h-0"
                   >
                     <Plus className="size-3.5" />
                     Add
@@ -274,7 +274,7 @@ export function ScheduleDialog({
                           action: e.target.value as PowerSchedule["action"],
                         }))
                       }
-                      className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-sm outline-none focus:border-accent"
+                      className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-base outline-none focus:border-accent md:text-sm"
                     >
                       <option value="start">Start</option>
                       <option value="shutdown">Shut down</option>
@@ -287,7 +287,7 @@ export function ScheduleDialog({
                       type="time"
                       value={form.time}
                       onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))}
-                      className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-sm outline-none focus:border-accent"
+                      className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-base outline-none focus:border-accent md:text-sm"
                       required
                     />
                   </label>
@@ -391,7 +391,7 @@ function DayChip({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-lg border px-2.5 py-1 text-xs ${
+      className={`min-h-11 rounded-lg border px-3 py-1 text-xs sm:min-h-0 sm:px-2.5 ${
         active
           ? "border-accent bg-accent/15 text-accent"
           : "border-line text-muted hover:bg-surface-2"

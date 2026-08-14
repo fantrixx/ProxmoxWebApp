@@ -139,7 +139,7 @@ export function BackupDialog({
   const title = name || `Guest ${vmid}`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center sm:p-6">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:items-center sm:p-6">
       <div className="flex h-[min(90dvh,820px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl">
         <div className="shrink-0 border-b border-line px-5 py-4">
           <div className="flex items-start justify-between gap-3">
@@ -217,7 +217,7 @@ export function BackupDialog({
               <select
                 value={selectedStorage}
                 onChange={(e) => setStorage(e.target.value)}
-                className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-sm outline-none focus:border-accent"
+                className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-base outline-none focus:border-accent md:text-sm"
                 disabled={storages.isLoading || nodeStorages.length === 0}
                 required
               >
@@ -239,7 +239,7 @@ export function BackupDialog({
               <select
                 value={mode}
                 onChange={(e) => setMode(e.target.value as typeof mode)}
-                className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-sm outline-none focus:border-accent"
+                className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-base outline-none focus:border-accent md:text-sm"
               >
                 <option value="snapshot">Snapshot (recommended)</option>
                 <option value="suspend">Suspend</option>
@@ -251,7 +251,7 @@ export function BackupDialog({
               <select
                 value={compress}
                 onChange={(e) => setCompress(e.target.value as typeof compress)}
-                className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-sm outline-none focus:border-accent"
+                className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-base outline-none focus:border-accent md:text-sm"
               >
                 <option value="zstd">zstd</option>
                 <option value="gzip">gzip</option>
