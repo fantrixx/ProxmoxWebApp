@@ -1,4 +1,13 @@
-import type { AuthUser, GuestDetail, ResourcesResponse, Snapshot } from "./types";
+import type {
+  AuthUser,
+  BackupStorage,
+  GuestDetail,
+  MediaItem,
+  PowerSchedule,
+  PveTask,
+  ResourcesResponse,
+  Snapshot,
+} from "./types";
 
 export class ApiError extends Error {
   constructor(
@@ -125,4 +134,80 @@ export const dataApi = {
       `/api/guests/${encodeURIComponent(node)}/${encodeURIComponent(type)}/${encodeURIComponent(vmid)}/resources`,
       { method: "PUT", body: JSON.stringify(body) },
     ),
+  tasks: (limit?: number) =>
+    api<{ tasks: PveTask[] }>(
+      `/api/tasks${limit != null ? `?limit=${encodeURIComponent(String(limit))}` : ""}`,
+    ),
+  taskStatus: (node: string, upid: string) =>
+    api<Record<string, unknown>>(
+      `/api/tasks/${encodeURIComponent(node)}/${encodeURIComponent(upid)}/status`,
+    ),
+  taskLog: (node: string, upid: string) =>
+    api<{ log: { n?: number; t?: string }[] }>(
+      `/api/tasks/${encodeURIComponent(node)}/${encodeURIComponent(upid)}/log`,
+    ),
+  mediaIsos: () => api<{ items: MediaItem[] }>("/api/media/isos"),
+  mediaTemplates: () => api<{ items: MediaItem[] }>("/api/media/templates"),
+  backupStorages: () => api<{ storages: BackupStorage[] }>("/api/media/backup-storages"),
+  storageContent: (node: string, storage: string, content?: string) =>
+    api<{ content: MediaItem[] }>(
+      `/api/storage/${encodeURIComponent(node)}/${encodeURIComponent(storage)}/content${
+        content ? `?content=${encodeURIComponent(content)}` : ""
+      }`,
+    ),
+  guestBackups: (node: string, type: string, vmid: string) =>
+    api<{ backups: MediaItem[] }>(
+      `/api/guests/${encodeURIComponent(node)}/${encodeURIComponent(type)}/${encodeURIComponent(vmid)}/backups`,
+    ),
+  startBackup: (
+    node: string,
+    type: string,
+    vmid: string,
+    body: {
+      storage: string;
+      mode?: "snapshot" | "suspend" | "stop";
+      compress?: "zstd" | "gzip" | "lzo" | "none";
+    },
+  ) => {
+    const compress = body.compress === "none" ? "0" : body.compress;
+    return api<{ ok: boolean; upid?: string }>(
+      `/api/guests/${encodeURIComponent(node)}/${encodeURIComponent(type)}/${encodeURIComponent(vmid)}/backup`,
+      {
+        method: "POST",
+        body: JSON.stringify({ ...body, compress }),
+      },
+    );
+  },
+  restoreBackup: (body: {
+    node: string;
+    type: "lxc" | "qemu";
+    vmid: number;
+    archive: string;
+    storage?: string;
+    force?: boolean;
+  }) =>
+    api<{ ok: boolean; upid?: string }>("/api/backups/restore", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  deleteBackup: (body: { node: string; storage: string; volume: string }) =>
+    api<{ ok: boolean }>("/api/backups", {
+      method: "DELETE",
+      body: JSON.stringify(body),
+    }),
+  setCdrom: (node: string, vmid: string, body: { volid?: string | null; ide?: string }) =>
+    api<{ ok: boolean; drive?: string; value?: string }>(
+      `/api/guests/${encodeURIComponent(node)}/qemu/${encodeURIComponent(vmid)}/cdrom`,
+      { method: "PUT", body: JSON.stringify(body) },
+    ),
+  schedules: () => api<{ schedules: PowerSchedule[] }>("/api/schedules"),
+  saveSchedule: (schedule: PowerSchedule) =>
+    api<{ schedule: PowerSchedule }>("/api/schedules", {
+      method: "PUT",
+      body: JSON.stringify(schedule),
+    }),
+  deleteSchedule: (id: string) =>
+    api<{ ok: boolean }>(`/api/schedules/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
 };

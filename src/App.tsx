@@ -10,6 +10,8 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const GuestList = lazy(() => import("./pages/GuestList"));
 const GuestDetail = lazy(() => import("./pages/GuestDetail"));
 const StoragePage = lazy(() => import("./pages/Storage"));
+const TasksPage = lazy(() => import("./pages/Tasks"));
+const MediaPage = lazy(() => import("./pages/Media"));
 const ConsolePage = lazy(() => import("./pages/ConsolePage"));
 
 function PageFallback() {
@@ -58,6 +60,8 @@ export default function App() {
             <Route path="containers" element={<GuestList kind="lxc" />} />
             <Route path="vms" element={<GuestList kind="qemu" />} />
             <Route path="storage" element={<StoragePage />} />
+            <Route path="tasks" element={<TasksPage />} />
+            <Route path="media" element={<MediaPage />} />
             <Route path="guest/:type/:node/:vmid" element={<GuestDetail />} />
           </Route>
         </Route>

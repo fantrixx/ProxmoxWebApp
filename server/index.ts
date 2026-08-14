@@ -20,13 +20,16 @@ import {
   ipsFromQemuAgent,
   primaryDisk,
 } from "./netinfo.ts";
+import { registerFeatureRoutes } from "./feature-routes.ts";
 import {
   COOKIE_NAME,
   createSession,
   deleteSession,
+  getAnySession,
   getSession,
   type Session,
 } from "./session.ts";
+import { startScheduleRunner } from "./schedules.ts";
 import { getAppVersion } from "./version.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -614,6 +617,32 @@ function sendError(res: express.Response, err: unknown) {
   res.status(500).json({ error: message + tlsHint });
 }
 
+function automationSession(): Session | null {
+  const tokenId = process.env.PROXMOX_TOKEN_ID;
+  const secret = process.env.PROXMOX_TOKEN_SECRET;
+  const envHost = process.env.PROXMOX_URL;
+  if (tokenId && secret && envHost) {
+    const insecureEnv = process.env.PROXMOX_INSECURE_TLS !== "false";
+    return {
+      id: "__automation__",
+      host: normalizeHost(envHost),
+      username: tokenId,
+      rejectUnauthorized: !insecureEnv,
+      auth: { kind: "token", tokenId, secret },
+      createdAt: Date.now(),
+    };
+  }
+  return getAnySession() ?? null;
+}
+
+registerFeatureRoutes(app, {
+  requireSession,
+  sessionOf,
+  param,
+  sendError,
+  awaitOptionalTask,
+});
+
 if (isProd) {
   const dist = path.join(__dirname, "..", "dist");
   app.use(express.static(dist));
@@ -647,4 +676,5 @@ server.listen(PORT, () => {
       ? `ProxPanel running at http://localhost:${PORT}`
       : `ProxPanel API at http://127.0.0.1:${PORT} (UI: Vite :5173)`,
   );
+  startScheduleRunner(() => automationSession());
 });

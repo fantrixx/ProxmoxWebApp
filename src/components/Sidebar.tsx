@@ -2,20 +2,26 @@ import { Link, useLocation } from "react-router-dom";
 import {
   Box,
   Cpu,
+  Disc3,
   HardDrive,
   LayoutDashboard,
+  ListTodo,
   MonitorSmartphone,
 } from "lucide-react";
 import { AppVersionLabel } from "./AppVersion";
 
-const items = [
+const desktopItems = [
   { to: "/", label: "Overview", icon: LayoutDashboard, exact: true },
   { to: "/containers", label: "Containers", icon: Box },
   { to: "/vms", label: "VMs", icon: MonitorSmartphone },
+  { to: "/tasks", label: "Tasks", icon: ListTodo },
+  { to: "/media", label: "Media", icon: Disc3 },
   { to: "/storage", label: "Storage", icon: HardDrive },
 ];
 
-function isActive(pathname: string, item: (typeof items)[number]) {
+const mobileItems = desktopItems.filter((item) => item.to !== "/storage");
+
+function isActive(pathname: string, item: (typeof desktopItems)[number]) {
   return item.exact ? pathname === item.to : pathname.startsWith(item.to);
 }
 
@@ -36,7 +42,7 @@ export function Sidebar() {
         </div>
       </div>
       <nav className="flex flex-1 flex-col gap-1 px-3">
-        {items.map((item) => {
+        {desktopItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(pathname, item);
           return (
@@ -70,8 +76,8 @@ export function MobileTabBar() {
 
   return (
     <nav className="shrink-0 border-t border-line bg-bg-2 pb-[env(safe-area-inset-bottom)] md:hidden">
-      <div className="grid grid-cols-4">
-        {items.map((item) => {
+      <div className="grid grid-cols-5">
+        {mobileItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(pathname, item);
           return (

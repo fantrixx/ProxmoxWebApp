@@ -18,6 +18,9 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { IpList } from "../components/IpList";
 import { SnapshotPanel } from "../components/SnapshotPanel";
 import { ResourceEditor } from "../components/ResourceEditor";
+import { BackupPanel } from "../components/BackupPanel";
+import { SchedulePanel } from "../components/SchedulePanel";
+import { CdromPanel } from "../components/CdromPanel";
 import { useApp } from "../context";
 import { useGuestAction } from "../hooks";
 import { POWER_CONFIRMS } from "../power";
@@ -157,6 +160,11 @@ export default function GuestDetail() {
 
         <ResourceEditor node={node} type={guestType} vmid={vmid} config={config} />
         <SnapshotPanel node={node} type={guestType} vmid={vmid} />
+        {guestType === "qemu" ? (
+          <CdromPanel node={node} vmid={vmid} config={config} />
+        ) : null}
+        <BackupPanel node={node} type={guestType} vmid={vmid} name={name} />
+        <SchedulePanel node={node} type={guestType} vmid={vmid} name={name} />
 
         <section className="rounded-2xl border border-line bg-surface p-5">
           <h2 className="mb-4 text-sm font-medium text-muted">Configuration</h2>

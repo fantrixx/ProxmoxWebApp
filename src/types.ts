@@ -108,3 +108,41 @@ export type GuestRates = {
   diskread: number;
   diskwrite: number;
 };
+
+export type PveTask = {
+  upid: string;
+  node?: string;
+  type?: string;
+  status?: string;
+  user?: string;
+  starttime?: number;
+  endtime?: number;
+  id?: string;
+  saved?: string;
+};
+
+export type MediaItem = {
+  node: string;
+  storage: string;
+  volid: string;
+  size?: number;
+  ctime?: number;
+  format?: string;
+  notes?: string;
+  vmid?: number;
+};
+
+export type BackupStorage = { node: string; storage: string; shared?: number };
+
+export type PowerSchedule = {
+  id: string;
+  node: string;
+  type: "lxc" | "qemu";
+  vmid: number;
+  name?: string;
+  enabled: boolean;
+  action: "start" | "shutdown" | "stop";
+  time: string;
+  days: number[];
+  lastRunKey?: string;
+};
