@@ -10,7 +10,6 @@ import {
   Play,
   Power,
   RotateCcw,
-  Square,
   TerminalSquare,
 } from "lucide-react";
 import type { ClusterResource, GuestRates, GuestType, MediaItem } from "../types";
@@ -206,13 +205,6 @@ export function GuestCard({
               label="Shut down"
               disabled={busy || backingUp}
               onClick={() => setConfirm("shutdown")}
-            />
-            <ActionBtn
-              icon={<Square className="size-3.5" />}
-              label="Stop"
-              danger
-              disabled={busy || backingUp}
-              onClick={() => setConfirm("stop")}
             />
             <ActionBtn
               icon={<RotateCcw className="size-3.5" />}
