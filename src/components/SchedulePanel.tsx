@@ -1,23 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { dataApi } from "../api";
-import { formatSnapTime } from "../format";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { ScheduleEmptyState, ScheduleRow, sortSchedules } from "./ScheduleList";
 import { useApp } from "../context";
 import { newId } from "../id";
 import type { GuestType, PowerSchedule } from "../types";
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-function lastRunLabel(schedule: PowerSchedule): string {
-  if (schedule.lastRunAt) return formatSnapTime(schedule.lastRunAt);
-  if (schedule.lastRunKey) {
-    const parsed = Date.parse(schedule.lastRunKey);
-    if (Number.isFinite(parsed)) return formatSnapTime(Math.floor(parsed / 1000));
-    return schedule.lastRunKey.replace("T", " ");
-  }
-  return "Never";
-}
 
 const emptyForm = (): Omit<PowerSchedule, "id"> & { id?: string } => ({
   node: "",
@@ -54,9 +44,10 @@ export function SchedulePanel({
 
   const guestSchedules = useMemo(() => {
     const id = Number(vmid);
-    return (list.data?.schedules || []).filter(
+    const filtered = (list.data?.schedules || []).filter(
       (s) => s.node === node && s.type === type && s.vmid === id,
     );
+    return sortSchedules(filtered);
   }, [list.data, node, type, vmid]);
 
   useEffect(() => {
@@ -124,6 +115,16 @@ export function SchedulePanel({
     onError: (err: Error) => toast("err", err.message),
   });
 
+  const toggle = useMutation({
+    mutationFn: (schedule: PowerSchedule) =>
+      dataApi.saveSchedule({ ...schedule, enabled: !schedule.enabled }),
+    onSuccess: (_data, schedule) => {
+      toast("ok", schedule.enabled ? "Schedule paused." : "Schedule enabled.");
+      invalidate();
+    },
+    onError: (err: Error) => toast("err", err.message),
+  });
+
   const remove = useMutation({
     mutationFn: (id: string) => dataApi.deleteSchedule(id),
     onSuccess: () => {
@@ -135,8 +136,8 @@ export function SchedulePanel({
   });
 
   const allDays = form.days.length === 0;
-  const busy = save.isPending || remove.isPending;
-  const showForm = creating || editing;
+  const busy = save.isPending || remove.isPending || toggle.isPending;
+  const showForm = creating || Boolean(editing);
 
   function toggleDay(day: number) {
     setForm((f) => {
@@ -154,7 +155,7 @@ export function SchedulePanel({
     <section className="rounded-2xl border border-line bg-surface p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-sm font-medium text-muted">Power schedules</h2>
-        {!showForm ? (
+        {!showForm && guestSchedules.length > 0 ? (
           <button
             type="button"
             onClick={openCreate}
@@ -173,47 +174,23 @@ export function SchedulePanel({
       {list.isError ? (
         <p className="text-sm text-bad">{(list.error as Error).message}</p>
       ) : guestSchedules.length === 0 && !showForm ? (
-        <p className="text-sm text-muted">No schedules for this guest.</p>
-      ) : (
-        <ul className="mb-4 max-h-64 divide-y divide-line overflow-y-auto rounded-xl border border-line">
+        <div className="mb-2">
+          <ScheduleEmptyState onAdd={openCreate} />
+        </div>
+      ) : guestSchedules.length > 0 ? (
+        <ul className="mb-4 flex max-h-80 flex-col gap-2 overflow-y-auto pr-0.5">
           {guestSchedules.map((s) => (
-            <li key={s.id} className="flex flex-wrap items-center gap-3 px-3 py-3">
-              <div className="min-w-0 flex-1">
-                <div className="font-medium">
-                  {s.action} at {s.time}
-                  {!s.enabled ? (
-                    <span className="ml-2 text-xs text-muted">(disabled)</span>
-                  ) : null}
-                </div>
-                <div className="text-xs text-muted">
-                  {s.days.length === 0
-                    ? "Every day"
-                    : s.days.map((d) => DAY_LABELS[d]).join(", ")}
-                </div>
-                <div className="mt-1 text-[11px] text-muted">
-                  Last run: <span className="text-ink/80">{lastRunLabel(s)}</span>
-                </div>
-              </div>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => openEdit(s)}
-                className="min-h-11 flex-1 rounded-lg border border-line px-2.5 py-2 text-xs hover:bg-surface-2 disabled:opacity-40 sm:min-h-0 sm:flex-none sm:py-1.5"
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => setDeleteId(s.id)}
-                className="min-h-11 flex-1 rounded-lg border border-bad/40 px-2.5 py-2 text-xs text-bad hover:bg-bad/10 disabled:opacity-40 sm:min-h-0 sm:flex-none sm:py-1.5"
-              >
-                Delete
-              </button>
-            </li>
+            <ScheduleRow
+              key={s.id}
+              schedule={s}
+              busy={busy}
+              onEdit={() => openEdit(s)}
+              onDelete={() => setDeleteId(s.id)}
+              onToggle={() => toggle.mutate(s)}
+            />
           ))}
         </ul>
-      )}
+      ) : null}
 
       {showForm ? (
         <form

@@ -1,9 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { dataApi } from "../api";
-import { formatSnapTime } from "../format";
 import { ConfirmDialog } from "./ConfirmDialog";
+import {
+  ScheduleEmptyState,
+  ScheduleRow,
+  lastRunLabel,
+  sortSchedules,
+} from "./ScheduleList";
 import { useApp } from "../context";
 import { newId } from "../id";
 import type { GuestType, PowerSchedule } from "../types";
@@ -19,27 +24,6 @@ const emptyForm = (): Omit<PowerSchedule, "id"> & { id?: string } => ({
   time: "08:00",
   days: [],
 });
-
-function actionLabel(action: PowerSchedule["action"]): string {
-  if (action === "shutdown") return "Shut down";
-  if (action === "stop") return "Stop";
-  return "Start";
-}
-
-function daysLabel(days: number[]): string {
-  if (!days.length) return "Every day";
-  return days.map((d) => DAY_LABELS[d]).join(", ");
-}
-
-function lastRunLabel(schedule: PowerSchedule): string {
-  if (schedule.lastRunAt) return formatSnapTime(schedule.lastRunAt);
-  if (schedule.lastRunKey) {
-    const parsed = Date.parse(schedule.lastRunKey);
-    if (Number.isFinite(parsed)) return formatSnapTime(Math.floor(parsed / 1000));
-    return schedule.lastRunKey.replace("T", " ");
-  }
-  return "Never";
-}
 
 export function ScheduleDialog({
   open,
@@ -72,9 +56,10 @@ export function ScheduleDialog({
   });
 
   const guestSchedules = useMemo(() => {
-    return (list.data?.schedules || []).filter(
+    const filtered = (list.data?.schedules || []).filter(
       (s) => s.node === node && s.type === type && s.vmid === vmidNum,
     );
+    return sortSchedules(filtered);
   }, [list.data, node, type, vmidNum]);
 
   useEffect(() => {
@@ -155,6 +140,16 @@ export function ScheduleDialog({
     onError: (err: Error) => toast("err", err.message),
   });
 
+  const toggle = useMutation({
+    mutationFn: (schedule: PowerSchedule) =>
+      dataApi.saveSchedule({ ...schedule, enabled: !schedule.enabled }),
+    onSuccess: (_data, schedule) => {
+      toast("ok", schedule.enabled ? "Schedule paused." : "Schedule enabled.");
+      invalidate();
+    },
+    onError: (err: Error) => toast("err", err.message),
+  });
+
   const remove = useMutation({
     mutationFn: (id: string) => dataApi.deleteSchedule(id),
     onSuccess: () => {
@@ -166,7 +161,7 @@ export function ScheduleDialog({
   });
 
   const allDays = form.days.length === 0;
-  const busy = save.isPending || remove.isPending;
+  const busy = save.isPending || remove.isPending || toggle.isPending;
 
   function toggleDay(day: number) {
     setForm((f) => {
@@ -179,6 +174,7 @@ export function ScheduleDialog({
   if (!open) return null;
 
   const title = name || `Guest ${vmid}`;
+  const activeCount = guestSchedules.filter((s) => s.enabled).length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center sm:p-6">
@@ -211,71 +207,49 @@ export function ScheduleDialog({
         <div className="flex min-h-0 flex-1 flex-col px-5 py-4">
           {mode === "list" ? (
             <>
-              <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
-                <p className="text-xs text-muted">
-                  {guestSchedules.length} schedule
-                  {guestSchedules.length === 1 ? "" : "s"}
-                </p>
-                <button
-                  type="button"
-                  onClick={openCreate}
-                  className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-black hover:bg-accent-2"
-                >
-                  Add schedule
-                </button>
-              </div>
+              {guestSchedules.length > 0 ? (
+                <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
+                  <p className="text-xs text-muted">
+                    {activeCount} active
+                    {guestSchedules.length !== activeCount
+                      ? ` · ${guestSchedules.length} total`
+                      : guestSchedules.length === 1
+                        ? " schedule"
+                        : " schedules"}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={openCreate}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-black hover:bg-accent-2"
+                  >
+                    <Plus className="size-3.5" />
+                    Add
+                  </button>
+                </div>
+              ) : null}
 
               {list.isError ? (
                 <p className="text-sm text-bad">{(list.error as Error).message}</p>
               ) : list.isLoading ? (
                 <p className="text-sm text-muted">Loading schedules…</p>
               ) : guestSchedules.length === 0 ? (
-                <p className="text-sm text-muted">No schedules for this guest yet.</p>
+                <ScheduleEmptyState onAdd={openCreate} />
               ) : (
-                <ul className="min-h-0 flex-1 divide-y divide-line overflow-y-auto rounded-xl border border-line">
+                <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-0.5">
                   {guestSchedules.map((s) => (
-                    <li key={s.id} className="px-3 py-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="font-medium">
-                            {actionLabel(s.action)} at {s.time}
-                            {!s.enabled ? (
-                              <span className="ml-2 text-xs font-normal text-muted">
-                                (disabled)
-                              </span>
-                            ) : null}
-                          </p>
-                          <p className="mt-0.5 text-[11px] text-muted">{daysLabel(s.days)}</p>
-                          <p className="mt-1 text-[11px] text-muted">
-                            Last run:{" "}
-                            <span className="text-ink/80">{lastRunLabel(s)}</span>
-                          </p>
-                        </div>
-                      </div>
-                      <div className="mt-2.5 flex gap-2">
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => openEdit(s)}
-                          className="min-h-11 flex-1 rounded-lg border border-line px-2.5 py-2 text-xs hover:bg-surface-2 disabled:opacity-40 sm:min-h-0 sm:py-1.5"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => setDeleteId(s.id)}
-                          className="min-h-11 flex-1 rounded-lg border border-bad/40 px-2.5 py-2 text-xs text-bad hover:bg-bad/10 disabled:opacity-40 sm:min-h-0 sm:py-1.5"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </li>
+                    <ScheduleRow
+                      key={s.id}
+                      schedule={s}
+                      busy={busy}
+                      onEdit={() => openEdit(s)}
+                      onDelete={() => setDeleteId(s.id)}
+                      onToggle={() => toggle.mutate(s)}
+                    />
                   ))}
                 </ul>
               )}
 
-              <p className="mt-3 shrink-0 text-[11px] text-muted">
+              <p className="mt-3 shrink-0 text-[11px] leading-relaxed text-muted">
                 ProxPanel must keep running. Use an API token in <code>.env</code> so
                 schedules survive reboot.
               </p>
@@ -343,16 +317,21 @@ export function ScheduleDialog({
                   </div>
                 </div>
 
-                <label className="flex items-center gap-2 text-sm text-muted">
+                <label className="flex items-center justify-between gap-3 rounded-xl border border-line bg-bg/40 px-3 py-3 text-sm">
+                  <span>
+                    <span className="block font-medium">Enabled</span>
+                    <span className="text-xs text-muted">
+                      Pause without deleting this schedule
+                    </span>
+                  </span>
                   <input
                     type="checkbox"
                     checked={form.enabled}
                     onChange={(e) =>
                       setForm((f) => ({ ...f, enabled: e.target.checked }))
                     }
-                    className="accent-accent"
+                    className="size-4 accent-accent"
                   />
-                  Enabled
                 </label>
 
                 {editing ? (
