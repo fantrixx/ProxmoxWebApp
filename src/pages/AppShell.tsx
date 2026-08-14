@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 import { Outlet } from "react-router-dom";
-import { Sidebar } from "../components/Sidebar";
+import { MobileTabBar, Sidebar } from "../components/Sidebar";
 import { Toasts } from "../components/Toasts";
 import { useApp } from "../context";
 
@@ -10,11 +10,12 @@ const TerminalModal = lazy(() =>
 
 export default function AppShell() {
   return (
-    <div className="flex min-h-dvh bg-bg">
+    <div className="flex h-dvh flex-col overflow-hidden bg-bg md:flex-row">
       <Sidebar />
-      <main className="min-w-0 flex-1 pb-20 md:pb-0">
+      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain">
         <Outlet />
       </main>
+      <MobileTabBar />
       <ConsoleHost />
       <Toasts />
     </div>
