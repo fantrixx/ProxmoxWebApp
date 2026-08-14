@@ -1,95 +1,131 @@
 # ProxPanel
 
-Web interface for managing a Proxmox VE server: view, start, stop, and shell into containers and VMs.
+**A focused web UI for Proxmox VE** — manage containers and VMs from any browser, including your phone.
 
-## Installation as LXC (Proxmox Helper Script)
+[![Version](https://img.shields.io/badge/version-1.3.14-orange?style=flat-square)](./package.json)
+[![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square)](https://nodejs.org/)
+[![Proxmox](https://img.shields.io/badge/Proxmox%20VE-API-E57000?style=flat-square)](https://www.proxmox.com/)
 
-On the **Proxmox host** as root (not inside a container):
+Install as an LXC on your Proxmox host in one command, sign in with your Proxmox credentials, and control guests without opening the full Proxmox UI.
+
+---
+
+## Install (Proxmox helper script)
+
+Run as **root on the Proxmox host** (not inside a container):
 
 ```bash
 bash -c "$(wget -qLO - https://raw.githubusercontent.com/fantrixx/ProxmoxWebApp/main/ct/proxpanel.sh)"
 ```
 
-The script creates a Debian 12 LXC, clones [this repo](https://github.com/fantrixx/ProxmoxWebApp), installs Node.js and npm dependencies, builds the app, and starts the service.
+The script creates a Debian 12 LXC, clones this repo, installs Node.js, builds ProxPanel, and starts the service.
 
-On startup you can choose:
+| Mode | What you get |
+|------|----------------|
+| **Default** | Debian 12 · DHCP · 2 CPU / 2 GiB RAM / 8 GiB disk · port `3000` |
+| **Custom** | CTID, CPU/RAM/disk, network, VLAN, DNS, SSH, port, Proxmox API URL, TLS, token, and more — with a summary before create |
 
-- **Default** — as before: Debian 12, DHCP, 2 CPU / 2 GiB RAM / 8 GiB disk, port 3000
-- **Custom** — CTID, CPU/RAM/disk/swap, storage, bridge, DHCP or static IP, VLAN, DNS, IPv6, root password, SSH, autostart, deletion protection, privileged/unprivileged, timezone, tags, web port, Proxmox API URL, TLS, optional user/token. A summary appears before creation.
+Open: `http://<CT-IP>:3000` and sign in (e.g. `root@pam`).
 
-Then: `http://<CT-IP>:3000` (or the chosen port) — sign in with your Proxmox user (e.g. `root@pam`).
+Non-interactive install:
 
-Without prompts: `DEFAULTS=yes bash -c "$(wget -qLO - https://raw.githubusercontent.com/fantrixx/ProxmoxWebApp/main/ct/proxpanel.sh)"`
+```bash
+DEFAULTS=yes bash -c "$(wget -qLO - https://raw.githubusercontent.com/fantrixx/ProxmoxWebApp/main/ct/proxpanel.sh)"
+```
+
+---
 
 ## Update
 
-Fetches the latest code from GitHub, builds the app, and restarts the service (`.env` is preserved).
+Keeps your `.env` and restarts the service after pulling the latest release from GitHub.
 
-On shell login in the container, a hint about `proxpanel-update` is shown. The web interface checks on the login and overview pages whether a newer version exists on GitHub and displays an update hint with the update command.
-
-**Inside the container** (after `pct enter <CTID>` or SSH):
+**Inside the container** (`pct enter <CTID>` or SSH):
 
 ```bash
 proxpanel-update
 ```
 
-If the command is not yet available (older installation), run the same script **inside the CT** once:
-
-```bash
-bash -c "$(wget -qLO - https://raw.githubusercontent.com/fantrixx/ProxmoxWebApp/main/ct/proxpanel.sh)"
-```
-
-**On the Proxmox host** (finds the ProxPanel LXC automatically):
+**On the Proxmox host** (finds the ProxPanel CT automatically):
 
 ```bash
 UPDATE=1 bash -c "$(wget -qLO - https://raw.githubusercontent.com/fantrixx/ProxmoxWebApp/main/ct/proxpanel.sh)"
 ```
 
-## Versioning
+If `proxpanel-update` is missing on an older install, run the helper script once **inside** the CT:
 
-The app version comes from `version` in `package.json` (currently **1.3.0**). It is shown on the login screen and in the UI after sign-in (header badge and sidebar). On every page load/reload the app checks GitHub for a newer commit or package version and shows an update banner when one is available.
+```bash
+bash -c "$(wget -qLO - https://raw.githubusercontent.com/fantrixx/ProxmoxWebApp/main/ct/proxpanel.sh)"
+```
+
+The UI also checks GitHub for newer versions and shows an update hint on login and overview pages.
+
+---
 
 ## Features
 
-- Sign in to the Proxmox server (username/password or API token)
-- Live metrics: CPU, RAM, disk, network, uptime
-- Start, shut down, stop, and restart LXC containers and QEMU VMs
-- Interactive shell (xterm.js via WebSocket proxy)
-- Snapshots, resource adjustment, IP display
-- Backups, restore, and scheduled power actions
-- Cluster tasks, ISO/template media library, VM CD/DVD attach
+### Guests
+- Live CPU, RAM, disk, network, and uptime on every card
+- Start, shut down, and restart from the overview
+- Force stop available on the guest detail page
+- Interactive shell (xterm.js over WebSocket)
+- IP overview with quick copy
+
+### Backups & jobs
+- Start backups from any guest card with storage, mode, and compression options
+- Past backups per guest, filtered by storage
+- Active job progress under the header (multi-job aware)
+- Progress feedback on the guest card while a backup runs
+
+### Power schedules
+- Plan start / shut down / stop per guest
+- Create, edit, pause, and delete from a dedicated dialog
+- Scrollable schedule list with last-run time
+- Survives reboot when you use an API token in `.env`
+
+### More
+- Snapshots and resource tuning
+- Cluster task list with readable titles
+- ISO / template media library and VM CD/DVD attach
 - Node and storage overview
+- Mobile-friendly layout (touch targets, bottom sheets, safe areas)
 
-## Requirements (local development)
+---
 
-- Node.js 20 or newer
-- Reachable Proxmox VE server (port 8006)
+## Versioning
 
-## Running (development)
+App version comes from `package.json` (currently **1.3.14**). It appears on the login screen and in the signed-in UI. On load, ProxPanel compares against GitHub and can show an update banner.
+
+---
+
+## Local development
+
+**Requirements:** Node.js 20+ and a reachable Proxmox VE host (API on port `8006`).
 
 ```bash
 npm install
 npm run dev
 ```
 
-The interface runs at [http://localhost:5173](http://localhost:5173).
+→ [http://localhost:5173](http://localhost:5173)
 
-Production:
+Production build:
 
 ```bash
 npm run build
 npm start
 ```
 
-Then: [http://localhost:3000](http://localhost:3000).
+→ [http://localhost:3000](http://localhost:3000)
 
-## Connection
+---
 
-On the login page, enter server URL, user, realm, and password. Proxmox often uses a self-signed certificate — leave **Verify TLS certificate** disabled in that case.
+## Connection & `.env`
 
-Optional `.env` (see `.env.example`):
+On the login page, enter server URL, user, realm, and password. For the common self-signed Proxmox certificate, leave **Verify TLS certificate** disabled.
 
-```
+Optional defaults via `.env` (see `.env.example`):
+
+```env
 PROXMOX_URL=https://192.168.1.10:8006
 PROXMOX_USER=root
 PROXMOX_REALM=pam
@@ -97,4 +133,19 @@ PROXMOX_TOKEN_ID=root@pam!proxpanel
 PROXMOX_TOKEN_SECRET=...
 ```
 
-API token in Proxmox: Datacenter → Permissions → API Tokens. The token needs permissions on `/` (e.g. Administrator or a custom role set with VM.Audit, VM.PowerMgmt, VM.Console).
+Create an API token in Proxmox: **Datacenter → Permissions → API Tokens**. The token needs access on `/` (e.g. Administrator, or a role with at least `VM.Audit`, `VM.PowerMgmt`, `VM.Console`, plus backup-related privileges if you use backups).
+
+> **Schedules:** ProxPanel must keep running, and an API token is recommended so power schedules still work after a reboot without an interactive login.
+
+---
+
+## Links
+
+- Repository: [github.com/fantrixx/ProxmoxWebApp](https://github.com/fantrixx/ProxmoxWebApp)
+- Install script: [`ct/proxpanel.sh`](./ct/proxpanel.sh)
+
+---
+
+<p align="center">
+  <sub>Built for homelabs and small Proxmox clusters · Not affiliated with Proxmox Server Solutions GmbH</sub>
+</p>
