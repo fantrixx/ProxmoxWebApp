@@ -66,7 +66,7 @@ export async function loginWithPassword(opts: {
   if (!res.ok || !json.data?.ticket || !json.data.CSRFPreventionToken) {
     throw new ProxmoxApiError(
       res.status,
-      json.message || "Anmeldung am Proxmox-Server fehlgeschlagen.",
+      json.message || "Login to Proxmox server failed.",
       json,
     );
   }
@@ -94,7 +94,7 @@ export async function verifyToken(opts: {
   if (!res.ok) {
     throw new ProxmoxApiError(
       res.status,
-      "API-Token ungültig oder keine Berechtigung.",
+      "Invalid API token or insufficient permissions.",
     );
   }
 }
@@ -155,7 +155,7 @@ export async function pveRequest<T = unknown>(
         : "";
     throw new ProxmoxApiError(
       res.status,
-      json.message || extra || `Proxmox-Fehler (${res.status})`,
+      json.message || extra || `Proxmox error (${res.status})`,
       json,
     );
   }
@@ -179,7 +179,7 @@ export async function waitForTask(
     if (data.status !== "running") return data;
     await new Promise((r) => setTimeout(r, 400));
   }
-  throw new ProxmoxApiError(504, "Zeitüberschreitung beim Warten auf die Aufgabe.");
+  throw new ProxmoxApiError(504, "Timed out waiting for task.");
 }
 
 export function unwrapUpid(raw: unknown): string | null {
@@ -201,7 +201,7 @@ export async function awaitOptionalTask(
   if (!upid) return null;
   const task = await waitForTask(session, node, upid, timeoutMs);
   if (task.exitstatus && task.exitstatus !== "OK") {
-    throw new ProxmoxApiError(500, `Aufgabe fehlgeschlagen: ${task.exitstatus}`);
+    throw new ProxmoxApiError(500, `Task failed: ${task.exitstatus}`);
   }
   return task;
 }

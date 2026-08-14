@@ -104,7 +104,7 @@ export async function getAppVersion(force = false): Promise<AppVersionInfo> {
         }
       }
     } catch (err) {
-      error = err instanceof Error ? err.message : "Versionsprüfung fehlgeschlagen";
+      error = err instanceof Error ? err.message : "Version check failed";
     }
 
     const info: AppVersionInfo = {

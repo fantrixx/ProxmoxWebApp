@@ -52,7 +52,7 @@ export function GuestCard({
 
   function shell() {
     if (!running) {
-      toast("err", "Die Shell ist nur bei laufenden Gästen verfügbar.");
+      toast("err", "Shell is only available for running guests.");
       return;
     }
     if (!guest.node || guest.vmid == null) return;
@@ -80,7 +80,7 @@ export function GuestCard({
             to={`/guest/${type}/${guest.node}/${guest.vmid}`}
             className="text-lg font-semibold tracking-tight hover:text-accent"
           >
-            {guest.name || `Gast ${guest.vmid}`}
+            {guest.name || `Guest ${guest.vmid}`}
           </Link>
           <p className="mt-1 text-xs text-muted">
             Node {guest.node}
@@ -105,7 +105,7 @@ export function GuestCard({
           detail={`${formatBytes(guest.mem)} / ${formatBytes(guest.maxmem)}`}
         />
         <MetricBar
-          label="Festplatte"
+          label="Disk"
           percent={usagePct(guest.disk, guest.maxdisk)}
           detail={`${formatBytes(guest.disk)} / ${formatBytes(guest.maxdisk)}`}
         />
@@ -127,20 +127,20 @@ export function GuestCard({
           <>
             <ActionBtn
               icon={<Power className="size-3.5" />}
-              label="Herunterfahren"
+              label="Shut down"
               disabled={busy}
               onClick={() => setConfirm("shutdown")}
             />
             <ActionBtn
               icon={<Square className="size-3.5" />}
-              label="Stoppen"
+              label="Stop"
               danger
               disabled={busy}
               onClick={() => setConfirm("stop")}
             />
             <ActionBtn
               icon={<RotateCcw className="size-3.5" />}
-              label="Neustart"
+              label="Restart"
               disabled={busy}
               onClick={() => setConfirm("reboot")}
             />
@@ -148,7 +148,7 @@ export function GuestCard({
         ) : (
           <ActionBtn
             icon={<Play className="size-3.5" />}
-            label="Starten"
+            label="Start"
             primary
             disabled={busy}
             onClick={() => run("start")}

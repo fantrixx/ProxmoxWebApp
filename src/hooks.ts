@@ -72,12 +72,12 @@ export function useGuestAction() {
     }) => dataApi.action(node, type, vmid, action),
     onSuccess: (_data, vars) => {
       const labels: Record<string, string> = {
-        start: "gestartet",
-        stop: "gestoppt",
-        shutdown: "heruntergefahren",
-        reboot: "neu gestartet",
+        start: "started",
+        stop: "stopped",
+        shutdown: "shut down",
+        reboot: "rebooted",
       };
-      toast("ok", `Gast ${labels[vars.action] || vars.action}.`);
+      toast("ok", `Guest ${labels[vars.action] || vars.action}.`);
       void qc.invalidateQueries({ queryKey: ["resources"] });
       void qc.invalidateQueries({ queryKey: ["guest"] });
     },

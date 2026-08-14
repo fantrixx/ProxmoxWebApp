@@ -6,12 +6,13 @@ import {
   LayoutDashboard,
   MonitorSmartphone,
 } from "lucide-react";
+import { AppVersionLabel } from "./AppVersion";
 
 const items = [
-  { to: "/", label: "Übersicht", icon: LayoutDashboard, exact: true },
-  { to: "/containers", label: "Container", icon: Box },
+  { to: "/", label: "Overview", icon: LayoutDashboard, exact: true },
+  { to: "/containers", label: "Containers", icon: Box },
   { to: "/vms", label: "VMs", icon: MonitorSmartphone },
-  { to: "/storage", label: "Speicher", icon: HardDrive },
+  { to: "/storage", label: "Storage", icon: HardDrive },
 ];
 
 function isActive(pathname: string, item: (typeof items)[number]) {
@@ -29,7 +30,9 @@ export function Sidebar() {
         </div>
         <div>
           <div className="text-sm font-semibold tracking-tight">ProxPanel</div>
-          <div className="text-[11px] text-muted">Proxmox Verwaltung</div>
+          <div className="text-[11px] text-muted">
+            Proxmox admin · <AppVersionLabel />
+          </div>
         </div>
       </div>
       <nav className="flex flex-1 flex-col gap-1 px-3">
@@ -52,7 +55,12 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <p className="px-5 py-4 text-[11px] text-muted">Live-Daten alle 3 Sekunden</p>
+      <div className="space-y-1 px-5 py-4 text-[11px] text-muted">
+        <p>Live data every 3 seconds</p>
+        <p className="font-mono">
+          <AppVersionLabel showCommit />
+        </p>
+      </div>
     </aside>
   );
 }

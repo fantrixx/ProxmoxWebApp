@@ -19,7 +19,7 @@ function Protected() {
   if (me.isLoading) {
     return (
       <div className="grid min-h-screen place-items-center bg-bg text-muted">
-        Verbindung wird geprüft…
+        Checking connection…
       </div>
     );
   }

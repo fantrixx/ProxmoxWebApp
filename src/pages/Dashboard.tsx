@@ -42,7 +42,7 @@ export default function Dashboard() {
   return (
     <div>
       <Header
-        title="Übersicht"
+        title="Overview"
         subtitle={
           q.data?.version
             ? `${view.clusterName} · Proxmox VE ${q.data.version.version}`
@@ -59,12 +59,12 @@ export default function Dashboard() {
         ) : null}
 
         <section className="grid gap-4 md:grid-cols-3">
-          <Stat title="Gäste" value={`${view.running} / ${view.guests.length}`} hint="laufen / gesamt" />
-          <Stat title="Nodes" value={String(view.nodes.length)} hint="im Cluster" />
+          <Stat title="Guests" value={`${view.running} / ${view.guests.length}`} hint="running / total" />
+          <Stat title="Nodes" value={String(view.nodes.length)} hint="in cluster" />
           <Stat
             title="CPU Cluster"
             value={avgCpu(view.nodes)}
-            hint="Mittel über alle Nodes"
+            hint="Average across all nodes"
           />
         </section>
 
@@ -85,15 +85,15 @@ export default function Dashboard() {
               <input
                 value={qtext}
                 onChange={(e) => setQtext(e.target.value)}
-                placeholder="Suchen…"
+                placeholder="Search…"
                 className="w-full rounded-xl border border-line bg-surface py-2.5 pr-3 pl-9 text-base outline-none focus:border-accent md:text-sm"
               />
             </div>
           </div>
           {q.isLoading ? (
-            <p className="text-sm text-muted">Lade Ressourcen…</p>
+            <p className="text-sm text-muted">Loading resources…</p>
           ) : filtered.length === 0 ? (
-            <p className="text-sm text-muted">Keine Gäste gefunden.</p>
+            <p className="text-sm text-muted">No guests found.</p>
           ) : (
             <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3">
               {filtered.map((g) => (
@@ -137,7 +137,7 @@ function NodeCard({ node }: { node: ClusterResource }) {
         <MetricBar
           label="CPU"
           percent={cpuPct(node.cpu)}
-          detail={`${cpuPct(node.cpu).toFixed(1)} % · ${node.maxcpu || "?"} Kerne`}
+          detail={`${cpuPct(node.cpu).toFixed(1)} % · ${node.maxcpu || "?"} cores`}
         />
         <MetricBar
           label="RAM"

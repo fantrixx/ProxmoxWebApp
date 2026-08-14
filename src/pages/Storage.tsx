@@ -13,14 +13,14 @@ export default function StoragePage() {
 
   return (
     <div>
-      <Header title="Speicher" subtitle={`${stores.length} Speicherpools`} />
+      <Header title="Storage" subtitle={`${stores.length} storage pools`} />
       <div className="px-4 py-4 md:px-8 md:py-6">
         {q.isError ? (
           <p className="text-sm text-bad">{(q.error as Error).message}</p>
         ) : q.isLoading ? (
-          <p className="text-sm text-muted">Lade Speicher…</p>
+          <p className="text-sm text-muted">Loading storage…</p>
         ) : stores.length === 0 ? (
-          <p className="text-sm text-muted">Keine Speicher gefunden.</p>
+          <p className="text-sm text-muted">No storage found.</p>
         ) : (
           <div className="grid gap-4 xl:grid-cols-2">
             {stores.map((s) => (
@@ -39,7 +39,7 @@ export default function StoragePage() {
                   </span>
                 </div>
                 <MetricBar
-                  label="Belegung"
+                  label="Usage"
                   percent={usagePct(s.disk, s.maxdisk)}
                   detail={`${formatBytes(s.disk)} / ${formatBytes(s.maxdisk)}`}
                 />

@@ -23,14 +23,14 @@ export default function GuestList({ kind }: { kind: GuestType }) {
     return hay.includes(qtext.trim().toLowerCase());
   });
 
-  const title = kind === "lxc" ? "Container" : "Virtuelle Maschinen";
+  const title = kind === "lxc" ? "Containers" : "Virtual machines";
   const running = guests.filter((g) => g.status === "running").length;
 
   return (
     <div>
       <Header
         title={title}
-        subtitle={`${running} von ${guests.length} laufen`}
+        subtitle={`${running} of ${guests.length} running`}
       />
       <div className="px-4 py-4 md:px-8 md:py-6">
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
@@ -50,16 +50,16 @@ export default function GuestList({ kind }: { kind: GuestType }) {
               onChange={(e) => setOnlyRunning(e.target.checked)}
               className="accent-accent"
             />
-            Nur laufende
+            Running only
           </label>
         </div>
 
         {q.isError ? (
           <p className="text-sm text-bad">{(q.error as Error).message}</p>
         ) : q.isLoading ? (
-          <p className="text-sm text-muted">Lade…</p>
+          <p className="text-sm text-muted">Loading…</p>
         ) : filtered.length === 0 ? (
-          <p className="text-sm text-muted">Keine Einträge.</p>
+          <p className="text-sm text-muted">No entries.</p>
         ) : (
           <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3">
             {filtered.map((g) => (

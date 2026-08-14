@@ -66,7 +66,7 @@ export function TerminalModal() {
     };
 
     ws.onopen = () => {
-      term.writeln("\x1b[90mVerbinde mit Proxmox-Konsole…\x1b[0m");
+      term.writeln("\x1b[90mConnecting to Proxmox console…\x1b[0m");
       sendResize();
       // termproxy idle timeout ~5 min — keep alive with protocol ping "2"
       keepalive = setInterval(() => {
@@ -80,10 +80,10 @@ export function TerminalModal() {
         term.write(new Uint8Array(ev.data as ArrayBuffer));
       }
     };
-    ws.onerror = () => term.writeln("\r\n\x1b[31mWebSocket-Fehler\x1b[0m");
+    ws.onerror = () => term.writeln("\r\n\x1b[31mWebSocket error\x1b[0m");
     ws.onclose = (ev) => {
       const reason = ev.reason || `Code ${ev.code}`;
-      term.writeln(`\r\n\x1b[90mKonsole beendet (${reason})\x1b[0m`);
+      term.writeln(`\r\n\x1b[90mConsole closed (${reason})\x1b[0m`);
     };
 
     const onData = term.onData((data) => {
@@ -127,7 +127,7 @@ export function TerminalModal() {
               Shell · {kind} {consoleTarget.vmid} · {consoleTarget.name}
             </div>
             <div className="hidden text-[11px] text-muted sm:block">
-              Node {consoleTarget.node} · Esc zum Schließen
+              Node {consoleTarget.node} · Esc to close
             </div>
           </div>
           <button

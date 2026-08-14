@@ -45,7 +45,7 @@ export function SnapshotPanel({
         vmstate: type === "qemu" ? vmstate : undefined,
       }),
     onSuccess: () => {
-      toast("ok", "Snapshot erstellt.");
+      toast("ok", "Snapshot created.");
       setName("");
       setDescription("");
       setVmstate(false);
@@ -58,7 +58,7 @@ export function SnapshotPanel({
     mutationFn: (snapname: string) =>
       dataApi.rollbackSnapshot(node, type, vmid, snapname),
     onSuccess: () => {
-      toast("ok", "Snapshot wiederhergestellt.");
+      toast("ok", "Snapshot restored.");
       setPending(null);
       invalidate();
     },
@@ -69,7 +69,7 @@ export function SnapshotPanel({
     mutationFn: (snapname: string) =>
       dataApi.deleteSnapshot(node, type, vmid, snapname),
     onSuccess: () => {
-      toast("ok", "Snapshot gelöscht.");
+      toast("ok", "Snapshot deleted.");
       setPending(null);
       invalidate();
     },
@@ -94,13 +94,13 @@ export function SnapshotPanel({
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="vor-update"
+            placeholder="pre-update"
             className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-base outline-none focus:border-accent md:text-sm"
             required
           />
         </label>
         <label>
-          <span className="mb-1 block text-[11px] text-muted">Beschreibung</span>
+          <span className="mb-1 block text-[11px] text-muted">Description</span>
           <input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -113,7 +113,7 @@ export function SnapshotPanel({
           disabled={busy || !name.trim()}
           className="min-h-11 rounded-xl bg-accent px-4 py-2.5 text-sm font-medium text-black hover:bg-accent-2 disabled:opacity-40 sm:min-h-0 sm:py-2"
         >
-          {create.isPending ? "Erstelle…" : "Anlegen"}
+          {create.isPending ? "Creating…" : "Create"}
         </button>
         {type === "qemu" ? (
           <label className="sm:col-span-3 flex items-center gap-2 text-sm text-muted">
@@ -123,7 +123,7 @@ export function SnapshotPanel({
               onChange={(e) => setVmstate(e.target.checked)}
               className="accent-accent"
             />
-            RAM-Zustand mitspeichern
+            Include RAM state
           </label>
         ) : null}
       </form>
@@ -131,7 +131,7 @@ export function SnapshotPanel({
       {list.isError ? (
         <p className="text-sm text-bad">{(list.error as Error).message}</p>
       ) : snapshots.length === 0 ? (
-        <p className="text-sm text-muted">Noch keine Snapshots.</p>
+        <p className="text-sm text-muted">No snapshots yet.</p>
       ) : (
         <ul className="divide-y divide-line">
           {snapshots.map((snap) => (
@@ -141,7 +141,7 @@ export function SnapshotPanel({
                 <div className="text-xs text-muted">
                   {formatSnapTime(snap.snaptime)}
                   {snap.description ? ` · ${snap.description}` : ""}
-                  {snap.vmstate ? " · inkl. RAM" : ""}
+                  {snap.vmstate ? " · incl. RAM" : ""}
                 </div>
               </div>
               <button
@@ -150,7 +150,7 @@ export function SnapshotPanel({
                 onClick={() => setPending({ kind: "rollback", snap })}
                 className="min-h-11 flex-1 rounded-lg border border-line px-2.5 py-2 text-xs hover:bg-surface-2 disabled:opacity-40 sm:min-h-0 sm:flex-none sm:py-1.5"
               >
-                Zurückrollen
+                Roll back
               </button>
               <button
                 type="button"
@@ -158,7 +158,7 @@ export function SnapshotPanel({
                 onClick={() => setPending({ kind: "delete", snap })}
                 className="min-h-11 flex-1 rounded-lg border border-bad/40 px-2.5 py-2 text-xs text-bad hover:bg-bad/10 disabled:opacity-40 sm:min-h-0 sm:flex-none sm:py-1.5"
               >
-                Löschen
+                Delete
               </button>
             </li>
           ))}
@@ -167,9 +167,9 @@ export function SnapshotPanel({
 
       {pending?.kind === "rollback" ? (
         <ConfirmDialog
-          title={`Auf „${pending.snap.name}“ zurückrollen?`}
-          body="Der aktuelle Zustand des Gastes wird durch diesen Snapshot ersetzt. Ungespeicherte Änderungen gehen verloren."
-          confirmLabel="Zurückrollen"
+          title={`Roll back to "${pending.snap.name}"?`}
+          body="The guest's current state will be replaced by this snapshot. Unsaved changes will be lost."
+          confirmLabel="Roll back"
           danger
           busy={rollback.isPending}
           onCancel={() => setPending(null)}
@@ -178,9 +178,9 @@ export function SnapshotPanel({
       ) : null}
       {pending?.kind === "delete" ? (
         <ConfirmDialog
-          title={`Snapshot „${pending.snap.name}“ löschen?`}
-          body="Der Snapshot wird unwiderruflich entfernt. Der laufende Gast bleibt unverändert."
-          confirmLabel="Löschen"
+          title={`Delete snapshot "${pending.snap.name}"?`}
+          body="The snapshot will be permanently removed. The running guest is not affected."
+          confirmLabel="Delete"
           danger
           busy={remove.isPending}
           onCancel={() => setPending(null)}

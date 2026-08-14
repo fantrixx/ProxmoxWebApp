@@ -1,87 +1,91 @@
 # ProxPanel
 
-Web-Oberfläche zur Verwaltung eines Proxmox-VE-Servers: Container und VMs anzeigen, starten, stoppen und per Shell bedienen.
+Web interface for managing a Proxmox VE server: view, start, stop, and shell into containers and VMs.
 
-## Installation als LXC (Proxmox Helper Script)
+## Installation as LXC (Proxmox Helper Script)
 
-Auf dem **Proxmox-Host** als root (nicht im Container):
+On the **Proxmox host** as root (not inside a container):
 
 ```bash
 bash -c "$(wget -qLO - https://raw.githubusercontent.com/fantrixx/ProxmoxWebApp/main/ct/proxpanel.sh)"
 ```
 
-Das Script legt einen Debian-12-LXC an, klont [dieses Repo](https://github.com/fantrixx/ProxmoxWebApp), installiert Node.js und npm-Abhängigkeiten, baut die App und startet den Dienst.
+The script creates a Debian 12 LXC, clones [this repo](https://github.com/fantrixx/ProxmoxWebApp), installs Node.js and npm dependencies, builds the app, and starts the service.
 
-Beim Start kannst du wählen:
+On startup you can choose:
 
-- **Standard** — wie bisher: Debian 12, DHCP, 2 CPU / 2 GiB RAM / 8 GiB Disk, Port 3000
-- **Custom** — CTID, CPU/RAM/Disk/Swap, Storage, Bridge, DHCP oder statische IP, VLAN, DNS, IPv6, root-Passwort, SSH, Autostart, Löschschutz, privilegiert/unprivilegiert, Zeitzone, Tags, Web-Port, Proxmox-API-URL, TLS, optional Benutzer/Token. Vor dem Anlegen erscheint eine Zusammenfassung.
+- **Default** — as before: Debian 12, DHCP, 2 CPU / 2 GiB RAM / 8 GiB disk, port 3000
+- **Custom** — CTID, CPU/RAM/disk/swap, storage, bridge, DHCP or static IP, VLAN, DNS, IPv6, root password, SSH, autostart, deletion protection, privileged/unprivileged, timezone, tags, web port, Proxmox API URL, TLS, optional user/token. A summary appears before creation.
 
-Danach: `http://<CT-IP>:3000` (bzw. der gewählte Port) — anmelden mit dem Proxmox-Benutzer (z. B. `root@pam`).
+Then: `http://<CT-IP>:3000` (or the chosen port) — sign in with your Proxmox user (e.g. `root@pam`).
 
-Ohne Rückfragen: `DEFAULTS=yes bash -c "$(wget -qLO - https://raw.githubusercontent.com/fantrixx/ProxmoxWebApp/main/ct/proxpanel.sh)"`
+Without prompts: `DEFAULTS=yes bash -c "$(wget -qLO - https://raw.githubusercontent.com/fantrixx/ProxmoxWebApp/main/ct/proxpanel.sh)"`
 
 ## Update
 
-Holt den aktuellen Stand von GitHub, baut die App und startet den Dienst neu (`.env` bleibt erhalten).
+Fetches the latest code from GitHub, builds the app, and restarts the service (`.env` is preserved).
 
-Beim Shell-Login im Container erscheint ein Hinweis auf `proxpanel-update`. Die Weboberfläche prüft auf Login- und Übersichtsseite, ob auf GitHub eine neuere Version liegt, und zeigt dann einen Hinweis mit dem Update-Befehl.
+On shell login in the container, a hint about `proxpanel-update` is shown. The web interface checks on the login and overview pages whether a newer version exists on GitHub and displays an update hint with the update command.
 
-**Im Container** (nach `pct enter <CTID>` oder SSH):
+**Inside the container** (after `pct enter <CTID>` or SSH):
 
 ```bash
 proxpanel-update
 ```
 
-Falls der Befehl noch fehlt (ältere Installation), einmalig dasselbe Script **im CT** ausführen:
+If the command is not yet available (older installation), run the same script **inside the CT** once:
 
 ```bash
 bash -c "$(wget -qLO - https://raw.githubusercontent.com/fantrixx/ProxmoxWebApp/main/ct/proxpanel.sh)"
 ```
 
-**Auf dem Proxmox-Host** (findet den ProxPanel-LXC selbst):
+**On the Proxmox host** (finds the ProxPanel LXC automatically):
 
 ```bash
 UPDATE=1 bash -c "$(wget -qLO - https://raw.githubusercontent.com/fantrixx/ProxmoxWebApp/main/ct/proxpanel.sh)"
 ```
 
-## Funktionen
+## Versioning
 
-- Anmeldung am Proxmox-Server (Benutzer/Passwort oder API-Token)
-- Live-Metriken: CPU, RAM, Festplatte, Netzwerk, Uptime
-- LXC-Container und QEMU-VMs starten, herunterfahren, stoppen, neu starten
-- Interaktive Shell (xterm.js über WebSocket-Proxy)
-- Snapshots, Ressourcen anpassen, IP-Anzeige
-- Node- und Speicherübersicht
+The app version comes from `version` in `package.json` (currently **1.2.0**). It is shown on the login screen and in the UI after sign-in (header badge and sidebar). Git commit comparison against GitHub is used separately to detect available updates.
 
-## Voraussetzungen (lokale Entwicklung)
+## Features
 
-- Node.js 20 oder neuer
-- Erreichbarer Proxmox-VE-Server (Port 8006)
+- Sign in to the Proxmox server (username/password or API token)
+- Live metrics: CPU, RAM, disk, network, uptime
+- Start, shut down, stop, and restart LXC containers and QEMU VMs
+- Interactive shell (xterm.js via WebSocket proxy)
+- Snapshots, resource adjustment, IP display
+- Node and storage overview
 
-## Starten (Entwicklung)
+## Requirements (local development)
+
+- Node.js 20 or newer
+- Reachable Proxmox VE server (port 8006)
+
+## Running (development)
 
 ```bash
 npm install
 npm run dev
 ```
 
-Die Oberfläche läuft unter [http://localhost:5173](http://localhost:5173).
+The interface runs at [http://localhost:5173](http://localhost:5173).
 
-Produktion:
+Production:
 
 ```bash
 npm run build
 npm start
 ```
 
-Dann: [http://localhost:3000](http://localhost:3000).
+Then: [http://localhost:3000](http://localhost:3000).
 
-## Verbindung
+## Connection
 
-Auf der Login-Seite Server-URL, Benutzer, Realm und Passwort eintragen. Proxmox nutzt oft ein Self-Signed-Zertifikat — **TLS-Zertifikat prüfen** dann ausgeschaltet lassen.
+On the login page, enter server URL, user, realm, and password. Proxmox often uses a self-signed certificate — leave **Verify TLS certificate** disabled in that case.
 
-Optional `.env` (siehe `.env.example`):
+Optional `.env` (see `.env.example`):
 
 ```
 PROXMOX_URL=https://192.168.1.10:8006
@@ -91,4 +95,4 @@ PROXMOX_TOKEN_ID=root@pam!proxpanel
 PROXMOX_TOKEN_SECRET=...
 ```
 
-API-Token in Proxmox: Datacenter → Permissions → API Tokens. Der Token braucht Rechte auf `/` (z. B. Administrator oder ein eigenes Role-Set mit VM.Audit, VM.PowerMgmt, VM.Console).
+API token in Proxmox: Datacenter → Permissions → API Tokens. The token needs permissions on `/` (e.g. Administrator or a custom role set with VM.Audit, VM.PowerMgmt, VM.Console).

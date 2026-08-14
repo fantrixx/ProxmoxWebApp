@@ -21,7 +21,7 @@ export function attachConsoleProxy(wss: WebSocketServer) {
   wss.on("connection", async (client, req) => {
     const session = getSessionFromUpgrade(req);
     if (!session) {
-      client.close(4001, "Nicht angemeldet");
+      client.close(4001, "Not signed in");
       return;
     }
 
@@ -31,7 +31,7 @@ export function attachConsoleProxy(wss: WebSocketServer) {
     const vmid = url.searchParams.get("vmid");
 
     if ((type !== "lxc" && type !== "qemu") || !node || !vmid) {
-      client.close(4002, "Ungültige Konsolen-Parameter");
+      client.close(4002, "Invalid console parameters");
       return;
     }
 
@@ -56,7 +56,7 @@ export function attachConsoleProxy(wss: WebSocketServer) {
     };
 
     client.on("close", () => shutdown());
-    client.on("error", () => shutdown(1011, "Client-Fehler"));
+    client.on("error", () => shutdown(1011, "Client error"));
 
     try {
       const proxy = await pveRequest<TermProxy>(
@@ -98,7 +98,7 @@ export function attachConsoleProxy(wss: WebSocketServer) {
         if (client.readyState === WebSocket.OPEN) client.send(data);
       });
 
-      pveWs.on("close", () => shutdown(1000, "Proxmox-Konsole beendet"));
+      pveWs.on("close", () => shutdown(1000, "Proxmox console closed"));
       pveWs.on("error", (err) => {
         shutdown(1011, err.message.slice(0, 120));
       });
@@ -114,7 +114,7 @@ export function attachConsoleProxy(wss: WebSocketServer) {
           ? err.message
           : err instanceof Error
             ? err.message
-            : "Konsole konnte nicht geöffnet werden";
+            : "Could not open console";
       shutdown(1011, message.slice(0, 120));
     }
   });

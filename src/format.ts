@@ -37,9 +37,9 @@ export function formatUptime(seconds?: number): string {
   const d = Math.floor(seconds / 86400);
   const h = Math.floor((seconds % 86400) / 3600);
   const m = Math.floor((seconds % 3600) / 60);
-  if (d > 0) return `${d} T ${h} Std`;
-  if (h > 0) return `${h} Std ${m} Min`;
-  return `${m} Min`;
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
 }
 
 export function guestLabel(type: string): string {
@@ -48,7 +48,7 @@ export function guestLabel(type: string): string {
 
 export function formatSnapTime(epoch?: number): string {
   if (!epoch) return "—";
-  return new Date(epoch * 1000).toLocaleString("de-DE", {
+  return new Date(epoch * 1000).toLocaleString("en-US", {
     dateStyle: "short",
     timeStyle: "short",
   });
@@ -57,16 +57,16 @@ export function formatSnapTime(epoch?: number): string {
 export function statusLabel(status?: string): string {
   switch (status) {
     case "running":
-      return "läuft";
+      return "running";
     case "stopped":
-      return "gestoppt";
+      return "stopped";
     case "paused":
-      return "pausiert";
+      return "paused";
     case "online":
       return "online";
     case "offline":
       return "offline";
     default:
-      return status || "unbekannt";
+      return status || "unknown";
   }
 }

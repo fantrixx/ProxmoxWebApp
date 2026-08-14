@@ -41,7 +41,7 @@ export function ResourceEditor({
         growGiB: growGiB > 0 ? growGiB : undefined,
       }),
     onSuccess: () => {
-      toast("ok", "Ressourcen aktualisiert.");
+      toast("ok", "Resources updated.");
       setGrowGiB(0);
       void qc.invalidateQueries({ queryKey: ["guest", node, type, vmid] });
       void qc.invalidateQueries({ queryKey: ["resources"] });
@@ -51,9 +51,9 @@ export function ResourceEditor({
 
   return (
     <section className="rounded-2xl border border-line bg-surface p-5">
-      <h2 className="mb-1 text-sm font-medium text-muted">Ressourcen</h2>
+      <h2 className="mb-1 text-sm font-medium text-muted">Resources</h2>
       <p className="mb-4 text-xs text-muted">
-        CPU und RAM lassen sich oft im laufenden Betrieb ändern. Die Festplatte kann nur vergrößert werden.
+        CPU and RAM can often be changed while running. Disk can only be grown.
       </p>
       <form
         className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
@@ -63,7 +63,7 @@ export function ResourceEditor({
         }}
       >
         <label>
-          <span className="mb-1 block text-[11px] text-muted">CPU-Kerne</span>
+          <span className="mb-1 block text-[11px] text-muted">CPU cores</span>
           <input
             type="number"
             min={1}
@@ -118,7 +118,7 @@ export function ResourceEditor({
             disabled={save.isPending}
             className="min-h-11 w-full rounded-xl bg-accent px-4 py-2.5 text-sm font-medium text-black hover:bg-accent-2 disabled:opacity-40 sm:min-h-0 sm:w-auto sm:py-2"
           >
-            {save.isPending ? "Speichere…" : "Übernehmen"}
+            {save.isPending ? "Saving…" : "Apply"}
           </button>
         </div>
       </form>

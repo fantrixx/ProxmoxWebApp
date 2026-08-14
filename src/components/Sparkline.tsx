@@ -9,7 +9,7 @@ export function Sparkline({
   const h = 56;
   const nums = values.filter((v) => Number.isFinite(v));
   if (nums.length < 2) {
-    return <div className="h-14 text-xs text-muted">Keine Verlaufsdaten</div>;
+    return <div className="h-14 text-xs text-muted">No history data</div>;
   }
   const min = Math.min(...nums);
   const max = Math.max(...nums);

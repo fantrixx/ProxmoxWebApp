@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { authApi } from "../api";
 import { useApp } from "../context";
+import { AppVersionLabel } from "./AppVersion";
 
 export function Header({ title, subtitle }: { title: string; subtitle?: string }) {
   const { user } = useApp();
@@ -30,11 +31,14 @@ export function Header({ title, subtitle }: { title: string; subtitle?: string }
             {user.host.replace(/^https?:\/\//, "")}
           </div>
         </div>
+        <span className="rounded-lg border border-line px-2 py-1 font-mono text-[11px] text-muted">
+          <AppVersionLabel />
+        </span>
         <button
           type="button"
           onClick={() => void logout()}
           className="min-h-11 min-w-11 rounded-lg border border-line p-2 text-muted hover:bg-surface-2 hover:text-ink md:min-h-0 md:min-w-0"
-          title="Abmelden"
+          title="Sign out"
         >
           <LogOut className="mx-auto size-4" />
         </button>

@@ -51,7 +51,7 @@ export default function GuestDetail() {
   const status = q.data?.status;
   const config = q.data?.config || {};
   const running = status?.status === "running";
-  const name = String(status?.name || config.name || `Gast ${vmid}`);
+  const name = String(status?.name || config.name || `Guest ${vmid}`);
 
   function run(kind: string) {
     action.mutate(
@@ -62,7 +62,7 @@ export default function GuestDetail() {
 
   function shell() {
     if (!running) {
-      toast("err", "Die Shell ist nur bei laufenden Gästen verfügbar.");
+      toast("err", "Shell is only available for running guests.");
       return;
     }
     openConsole({ type: guestType, node: node!, vmid: Number(vmid), name });
@@ -79,12 +79,12 @@ export default function GuestDetail() {
     <div>
       <Header
         title={name}
-        subtitle={`${guestLabel(guestType)} ${vmid} auf ${node}`}
+        subtitle={`${guestLabel(guestType)} ${vmid} on ${node}`}
       />
       <div className="space-y-6 px-4 py-4 md:px-8 md:py-6">
         <Link to="/" className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
           <ArrowLeft className="size-4" />
-          Zurück
+          Back
         </Link>
 
         {q.isError ? (
@@ -101,18 +101,18 @@ export default function GuestDetail() {
             {running ? (
               <>
                 <Btn onClick={() => setConfirm("shutdown")} disabled={action.isPending}>
-                  <Power className="size-3.5" /> Herunterfahren
+                  <Power className="size-3.5" /> Shut down
                 </Btn>
                 <Btn danger onClick={() => setConfirm("stop")} disabled={action.isPending}>
-                  <Square className="size-3.5" /> Stoppen
+                  <Square className="size-3.5" /> Stop
                 </Btn>
                 <Btn onClick={() => setConfirm("reboot")} disabled={action.isPending}>
-                  <RotateCcw className="size-3.5" /> Neustart
+                  <RotateCcw className="size-3.5" /> Restart
                 </Btn>
               </>
             ) : (
               <Btn primary onClick={() => run("start")} disabled={action.isPending}>
-                <Play className="size-3.5" /> Starten
+                <Play className="size-3.5" /> Start
               </Btn>
             )}
             <Btn onClick={shell} disabled={!running}>
@@ -126,7 +126,7 @@ export default function GuestDetail() {
             <MetricBar
               label="CPU"
               percent={cpuPct(status?.cpu)}
-              detail={`${cpuPct(status?.cpu).toFixed(1)} % · ${status?.cpus ?? config.cores ?? "?"} Kerne`}
+              detail={`${cpuPct(status?.cpu).toFixed(1)} % · ${status?.cpus ?? config.cores ?? "?"} cores`}
             />
             <div className="mt-4">
               <Sparkline values={cpuSeries} color="#ff7a1a" />
@@ -144,14 +144,14 @@ export default function GuestDetail() {
           </div>
           <div className="rounded-2xl border border-line bg-surface p-5">
             <MetricBar
-              label="Festplatte"
+              label="Disk"
               percent={usagePct(status?.disk, status?.maxdisk)}
               detail={`${formatBytes(status?.disk)} / ${formatBytes(status?.maxdisk)}`}
             />
             <div className="mt-4">
               <Sparkline values={netSeries} color="#34d399" />
             </div>
-            <p className="mt-1 text-[11px] text-muted">Netzwerk-Verlauf (In+Out)</p>
+            <p className="mt-1 text-[11px] text-muted">Network history (in+out)</p>
           </div>
         </section>
 
@@ -159,17 +159,17 @@ export default function GuestDetail() {
         <SnapshotPanel node={node} type={guestType} vmid={vmid} />
 
         <section className="rounded-2xl border border-line bg-surface p-5">
-          <h2 className="mb-4 text-sm font-medium text-muted">Konfiguration</h2>
+          <h2 className="mb-4 text-sm font-medium text-muted">Configuration</h2>
           <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
             <Item label="Hostname" value={str(config.hostname || config.name)} />
-            <Item label="OS-Typ" value={str(config.ostype)} />
-            <Item label="Kerne" value={str(config.cores || config.cpulimit)} />
-            <Item label="Speicher" value={config.memory ? `${config.memory} MiB` : undefined} />
+            <Item label="OS type" value={str(config.ostype)} />
+            <Item label="Cores" value={str(config.cores || config.cpulimit)} />
+            <Item label="Memory" value={config.memory ? `${config.memory} MiB` : undefined} />
             <Item label="Swap" value={config.swap != null ? `${config.swap} MiB` : undefined} />
-            <Item label="Root-FS" value={str(config.rootfs || config.scsi0 || config.virtio0)} />
-            <Item label="Netzwerk" value={str(config.net0)} />
-            <Item label="Autostart" value={config.onboot ? "ja" : "nein"} />
-            <Item label="Unprivileged" value={config.unprivileged ? "ja" : undefined} />
+            <Item label="Root FS" value={str(config.rootfs || config.scsi0 || config.virtio0)} />
+            <Item label="Network" value={str(config.net0)} />
+            <Item label="Autostart" value={config.onboot ? "yes" : "no"} />
+            <Item label="Unprivileged" value={config.unprivileged ? "yes" : undefined} />
           </dl>
         </section>
       </div>

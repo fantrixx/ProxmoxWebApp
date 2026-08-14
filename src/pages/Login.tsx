@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Cpu } from "lucide-react";
 import { ApiError, authApi } from "../api";
+import { AppVersionLabel } from "../components/AppVersion";
 import { UpdateBanner } from "../components/UpdateBanner";
 
 const LOGIN_PREFS_KEY = "proxpanel.login";
@@ -83,7 +84,11 @@ export default function Login() {
       qc.setQueryData(["me"], user);
       navigate("/", { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError || err instanceof Error ? err.message : "Anmeldung fehlgeschlagen");
+      setError(
+        err instanceof ApiError || err instanceof Error
+          ? err.message
+          : "Sign-in failed",
+      );
     } finally {
       setPending(false);
     }
@@ -98,7 +103,9 @@ export default function Login() {
           </div>
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">ProxPanel</h1>
-            <p className="text-sm text-muted">Proxmox VE Administration</p>
+            <p className="text-sm text-muted">
+              Proxmox VE Administration · <AppVersionLabel />
+            </p>
           </div>
         </div>
 
@@ -109,7 +116,7 @@ export default function Login() {
           className="rounded-2xl border border-line bg-surface/90 p-6 shadow-2xl backdrop-blur"
         >
           <label className="mb-4 block">
-            <span className="mb-1.5 block text-xs text-muted">Proxmox-Server</span>
+            <span className="mb-1.5 block text-xs text-muted">Proxmox server</span>
             <input
               value={host}
               onChange={(e) => setHost(e.target.value)}
@@ -121,7 +128,7 @@ export default function Login() {
           </label>
           <div className="mb-4 grid grid-cols-2 gap-3">
             <label>
-              <span className="mb-1.5 block text-xs text-muted">Benutzer</span>
+              <span className="mb-1.5 block text-xs text-muted">Username</span>
               <input
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -144,7 +151,7 @@ export default function Login() {
             </label>
           </div>
           <label className="mb-4 block">
-            <span className="mb-1.5 block text-xs text-muted">Passwort</span>
+            <span className="mb-1.5 block text-xs text-muted">Password</span>
             <input
               type="password"
               value={password}
@@ -161,7 +168,7 @@ export default function Login() {
               onChange={(e) => setCheckCert(e.target.checked)}
               className="accent-accent"
             />
-            TLS-Zertifikat prüfen
+            Verify TLS certificate
           </label>
 
           {error ? (
@@ -175,7 +182,7 @@ export default function Login() {
             disabled={pending}
             className="min-h-12 w-full rounded-xl bg-accent py-3 text-sm font-semibold text-black hover:bg-accent-2 disabled:opacity-50"
           >
-            {pending ? "Verbinde…" : "Anmelden"}
+            {pending ? "Connecting…" : "Sign in"}
           </button>
 
           {hasToken ? (
@@ -185,12 +192,15 @@ export default function Login() {
               onClick={(e) => void submit(e, true)}
               className="mt-3 w-full rounded-xl border border-line py-2.5 text-sm text-muted hover:bg-surface-2 hover:text-ink disabled:opacity-50"
             >
-              Mit API-Token aus .env verbinden
+              Connect with API token from .env
             </button>
           ) : null}
         </form>
         <p className="mt-6 text-center text-xs text-muted">
-          Server, Benutzer und Realm werden in diesem Browser gespeichert. Das Passwort nicht.
+          Server, username, and realm are saved in this browser. The password is not.
+        </p>
+        <p className="mt-2 text-center font-mono text-[11px] text-muted">
+          <AppVersionLabel showCommit />
         </p>
       </div>
     </div>

@@ -57,7 +57,7 @@ function requireSession(
 ) {
   const session = getSession(readSid(req));
   if (!session) {
-    res.status(401).json({ error: "Nicht angemeldet." });
+    res.status(401).json({ error: "Not signed in." });
     return;
   }
   (req as express.Request & { session: Session }).session = session;
@@ -83,7 +83,7 @@ app.get("/api/version", async (req, res) => {
     res.json(info);
   } catch (err) {
     res.status(500).json({
-      error: err instanceof Error ? err.message : "Versionsprüfung fehlgeschlagen",
+      error: err instanceof Error ? err.message : "Version check failed",
     });
   }
 });
@@ -129,7 +129,7 @@ app.post("/api/auth/login", async (req, res) => {
       if (!tokenId || !secret || !envHost) {
         res.status(400).json({
           error:
-            "API-Token ist nicht in der .env konfiguriert (PROXMOX_URL, PROXMOX_TOKEN_ID, PROXMOX_TOKEN_SECRET).",
+            "API token is not configured in .env (PROXMOX_URL, PROXMOX_TOKEN_ID, PROXMOX_TOKEN_SECRET).",
         });
         return;
       }
@@ -152,7 +152,7 @@ app.post("/api/auth/login", async (req, res) => {
     }
 
     if (!host || !username || !password) {
-      res.status(400).json({ error: "Server, Benutzername und Passwort sind erforderlich." });
+      res.status(400).json({ error: "Server, username, and password are required." });
       return;
     }
 
@@ -248,7 +248,7 @@ async function resolveGuestIps(
     try {
       ips = ipsFromLxcIfaces(await pveRequest(session, "GET", `${base}/interfaces`));
     } catch {
-      /* Fallback auf Config */
+      /* Fallback to config */
     }
   } else if (running && type === "qemu" && !qemuAgentMissing.has(key)) {
     try {
@@ -319,7 +319,7 @@ app.get("/api/resources", requireSession, async (req, res) => {
           }
           row.ips = await resolveGuestIps(session, type, row.node!, row.vmid!, running);
         } catch {
-          /* cluster/resources bleibt als Fallback */
+          /* cluster/resources remains as fallback */
         }
       }),
     );
@@ -340,7 +340,7 @@ app.get(
       const type = param(req.params.type);
       const vmid = param(req.params.vmid);
       if (type !== "lxc" && type !== "qemu") {
-        res.status(400).json({ error: "Ungültiger Typ." });
+        res.status(400).json({ error: "Invalid type." });
         return;
       }
       const base = `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}`;
@@ -375,7 +375,7 @@ app.get(
       const type = param(req.params.type);
       const vmid = param(req.params.vmid);
       if (type !== "lxc" && type !== "qemu") {
-        res.status(400).json({ error: "Ungültiger Typ." });
+        res.status(400).json({ error: "Invalid type." });
         return;
       }
       const snapshots = await pveRequest(
@@ -400,7 +400,7 @@ app.post(
       const type = param(req.params.type);
       const vmid = param(req.params.vmid);
       if (type !== "lxc" && type !== "qemu") {
-        res.status(400).json({ error: "Ungültiger Typ." });
+        res.status(400).json({ error: "Invalid type." });
         return;
       }
       const { snapname, description, vmstate } = req.body as {
@@ -410,7 +410,7 @@ app.post(
       };
       if (!snapname || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/.test(snapname)) {
         res.status(400).json({
-          error: "Ungültiger Snapshot-Name. Nur Buchstaben, Zahlen, _ und -.",
+          error: "Invalid snapshot name. Letters, numbers, _, and - only.",
         });
         return;
       }
@@ -443,7 +443,7 @@ app.post(
       const vmid = param(req.params.vmid);
       const snapname = param(req.params.snapname);
       if (type !== "lxc" && type !== "qemu") {
-        res.status(400).json({ error: "Ungültiger Typ." });
+        res.status(400).json({ error: "Invalid type." });
         return;
       }
       const raw = await pveRequest(
@@ -471,7 +471,7 @@ app.delete(
       const vmid = param(req.params.vmid);
       const snapname = param(req.params.snapname);
       if (type !== "lxc" && type !== "qemu") {
-        res.status(400).json({ error: "Ungültiger Typ." });
+        res.status(400).json({ error: "Invalid type." });
         return;
       }
       const raw = await pveRequest(
@@ -497,7 +497,7 @@ app.put(
       const type = param(req.params.type);
       const vmid = param(req.params.vmid);
       if (type !== "lxc" && type !== "qemu") {
-        res.status(400).json({ error: "Ungültiger Typ." });
+        res.status(400).json({ error: "Invalid type." });
         return;
       }
 
@@ -515,11 +515,11 @@ app.put(
       const growN = growGiB != null ? Number(growGiB) : 0;
 
       if (coresN != null && (!Number.isInteger(coresN) || coresN < 1 || coresN > 128)) {
-        res.status(400).json({ error: "CPU-Kerne müssen zwischen 1 und 128 liegen." });
+        res.status(400).json({ error: "CPU cores must be between 1 and 128." });
         return;
       }
       if (memoryN != null && (!Number.isFinite(memoryN) || memoryN < 16 || memoryN > 524288)) {
-        res.status(400).json({ error: "RAM muss zwischen 16 und 524288 MiB liegen." });
+        res.status(400).json({ error: "RAM must be between 16 and 524288 MiB." });
         return;
       }
       if (
@@ -527,11 +527,11 @@ app.put(
         swapN != null &&
         (!Number.isFinite(swapN) || swapN < 0 || swapN > 524288)
       ) {
-        res.status(400).json({ error: "Swap muss zwischen 0 und 524288 MiB liegen." });
+        res.status(400).json({ error: "Swap must be between 0 and 524288 MiB." });
         return;
       }
       if (growN && (growN < 0 || growN > 1024)) {
-        res.status(400).json({ error: "Die Festplatte kann um maximal 1024 GiB wachsen." });
+        res.status(400).json({ error: "Disk can grow by at most 1024 GiB." });
         return;
       }
 
@@ -551,7 +551,7 @@ app.put(
         );
         const disk = primaryDisk(type, config);
         if (!disk) {
-          res.status(400).json({ error: "Keine Festplatte zum Vergrößern gefunden." });
+          res.status(400).json({ error: "No disk found to resize." });
           return;
         }
         const raw = await pveRequest(session, "PUT", `${base}/resize`, {
@@ -579,12 +579,12 @@ app.post(
       const vmid = param(req.params.vmid);
       const action = param(req.params.action);
       if (type !== "lxc" && type !== "qemu") {
-        res.status(400).json({ error: "Ungültiger Typ." });
+        res.status(400).json({ error: "Invalid type." });
         return;
       }
       const allowed = new Set(["start", "stop", "shutdown", "reboot"]);
       if (!allowed.has(action)) {
-        res.status(400).json({ error: "Ungültige Aktion." });
+        res.status(400).json({ error: "Invalid action." });
         return;
       }
       const raw = await pveRequest<string | { upid?: string }>(
@@ -606,10 +606,10 @@ function sendError(res: express.Response, err: unknown) {
     res.status(err.status >= 400 ? err.status : 500).json({ error: err.message });
     return;
   }
-  const message = err instanceof Error ? err.message : "Unbekannter Fehler";
+  const message = err instanceof Error ? err.message : "Unknown error";
   const tlsHint =
     /certificate|SSL|self-signed|unable to verify/i.test(message)
-      ? " Prüfen Sie, ob „Zertifikat prüfen“ deaktiviert ist (Self-Signed ist bei Proxmox üblich)."
+      ? ' Check whether "Verify TLS certificate" is disabled (self-signed certificates are common with Proxmox).'
       : "";
   res.status(500).json({ error: message + tlsHint });
 }
@@ -644,7 +644,7 @@ server.on("upgrade", (req, socket, head) => {
 server.listen(PORT, () => {
   console.log(
     isProd
-      ? `ProxPanel läuft auf http://localhost:${PORT}`
-      : `ProxPanel API auf http://127.0.0.1:${PORT} (UI: Vite :5173)`,
+      ? `ProxPanel running at http://localhost:${PORT}`
+      : `ProxPanel API at http://127.0.0.1:${PORT} (UI: Vite :5173)`,
   );
 });

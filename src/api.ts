@@ -28,7 +28,7 @@ async function parseError(res: Response): Promise<string> {
     const body = (await res.json()) as { error?: string };
     return body.error || res.statusText;
   } catch {
-    return res.statusText || "Unbekannter Fehler";
+    return res.statusText || "Unknown error";
   }
 }
 
@@ -46,7 +46,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     if (!window.location.pathname.startsWith("/login")) {
       window.location.assign("/login");
     }
-    throw new ApiError(401, "Nicht angemeldet.");
+    throw new ApiError(401, "Not signed in.");
   }
   if (!res.ok) {
     throw new ApiError(res.status, await parseError(res));

@@ -45,14 +45,15 @@ export function UpdateBanner({ className = "" }: { className?: string }) {
     >
       <Download className="mt-0.5 size-4 shrink-0 text-accent" />
       <div className="min-w-0 flex-1">
-        <p className="font-medium text-accent-2">Neue ProxPanel-Version verfügbar</p>
+        <p className="font-medium text-accent-2">New ProxPanel version available</p>
         <p className="mt-0.5 text-muted">
-          Installiert: {info.currentCommit || info.currentVersion}
-          {info.latestCommit ? ` · Neu: ${info.latestCommit}` : null}
+          Installed: v{info.currentVersion}
+          {info.currentCommit ? ` (${info.currentCommit})` : ""}
+          {info.latestCommit ? ` · Latest: ${info.latestCommit}` : null}
           {info.latestMessage ? ` — ${info.latestMessage}` : null}
         </p>
         <p className="mt-1 text-xs text-muted">
-          Im Container ausführen:{" "}
+          Run inside the container:{" "}
           <code className="rounded bg-bg/60 px-1.5 py-0.5 font-mono text-ink">
             {info.updateCommand}
           </code>
@@ -60,7 +61,7 @@ export function UpdateBanner({ className = "" }: { className?: string }) {
       </div>
       <button
         type="button"
-        aria-label="Hinweis schließen"
+        aria-label="Dismiss"
         className="rounded-lg p-1 text-muted hover:bg-surface-2 hover:text-ink"
         onClick={() => {
           dismiss(info.latestCommit);

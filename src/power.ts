@@ -3,19 +3,19 @@ export const POWER_CONFIRMS: Record<
   { title: string; body: string; confirm: string; danger?: boolean }
 > = {
   shutdown: {
-    title: "Gast herunterfahren?",
-    body: "Es wird ein geordnetes Herunterfahren ausgelöst. Ungespeicherte Daten in laufenden Programmen können verloren gehen.",
-    confirm: "Herunterfahren",
+    title: "Shut down guest?",
+    body: "An orderly shutdown will be requested. Unsaved data in running programs may be lost.",
+    confirm: "Shut down",
   },
   stop: {
-    title: "Gast hart stoppen?",
-    body: "Das entspricht dem Ziehen des Stromkabels. Es kann zu Datenverlust oder Dateisystemschäden kommen.",
-    confirm: "Stoppen",
+    title: "Force stop guest?",
+    body: "This is like pulling the power cord. It can cause data loss or filesystem damage.",
+    confirm: "Stop",
     danger: true,
   },
   reboot: {
-    title: "Gast neu starten?",
-    body: "Der Gast wird neu gestartet. Laufende Dienste werden kurz unterbrochen.",
-    confirm: "Neustarten",
+    title: "Reboot guest?",
+    body: "The guest will restart. Running services will be interrupted briefly.",
+    confirm: "Reboot",
   },
 };

@@ -37,7 +37,7 @@ export function ConfirmDialog({
             onClick={onCancel}
             className="min-h-11 rounded-lg border border-line px-3 py-2 text-sm hover:bg-surface-2 disabled:opacity-40 sm:min-h-0 sm:py-1.5"
           >
-            Abbrechen
+            Cancel
           </button>
           <button
             type="button"
@@ -49,7 +49,7 @@ export function ConfirmDialog({
                 : "bg-accent text-black hover:bg-accent-2"
             }`}
           >
-            {busy ? "Bitte warten…" : confirmLabel}
+            {busy ? "Please wait…" : confirmLabel}
           </button>
         </div>
       </div>
