@@ -14,6 +14,7 @@ export type AppVersionInfo = {
   name: string;
   currentVersion: string;
   currentCommit: string | null;
+  latestVersion: string | null;
   latestCommit: string | null;
   latestMessage: string | null;
   updateAvailable: boolean;

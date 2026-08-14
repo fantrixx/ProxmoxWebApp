@@ -3,38 +3,21 @@ import { Download, X } from "lucide-react";
 import { useState } from "react";
 import { metaApi, type AppVersionInfo } from "../api";
 
-const DISMISS_KEY = "proxpanel.updateBanner.dismissed";
-
-function dismissedFor(commit: string | null): boolean {
-  if (!commit) return false;
-  try {
-    return sessionStorage.getItem(DISMISS_KEY) === commit;
-  } catch {
-    return false;
-  }
-}
-
-function dismiss(commit: string | null) {
-  if (!commit) return;
-  try {
-    sessionStorage.setItem(DISMISS_KEY, commit);
-  } catch {
-    /* ignore */
-  }
-}
-
 export function UpdateBanner({ className = "" }: { className?: string }) {
   const q = useQuery({
     queryKey: ["app-version"],
-    queryFn: () => metaApi.version(),
-    staleTime: 10 * 60 * 1000,
+    queryFn: () => metaApi.version(true),
+    staleTime: 0,
+    gcTime: 5 * 60 * 1000,
+    refetchOnMount: "always",
     refetchOnWindowFocus: true,
     retry: 1,
   });
   const info = q.data;
-  const [hidden, setHidden] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
 
-  if (hidden || !info?.updateAvailable || dismissedFor(info.latestCommit)) {
+  // Dismiss only for this page view — a reload runs a fresh check again.
+  if (dismissed || !info?.updateAvailable) {
     return null;
   }
 
@@ -49,7 +32,8 @@ export function UpdateBanner({ className = "" }: { className?: string }) {
         <p className="mt-0.5 text-muted">
           Installed: v{info.currentVersion}
           {info.currentCommit ? ` (${info.currentCommit})` : ""}
-          {info.latestCommit ? ` · Latest: ${info.latestCommit}` : null}
+          {info.latestVersion ? ` · Latest: v${info.latestVersion}` : null}
+          {info.latestCommit ? ` (${info.latestCommit})` : null}
           {info.latestMessage ? ` — ${info.latestMessage}` : null}
         </p>
         <p className="mt-1 text-xs text-muted">
@@ -63,10 +47,7 @@ export function UpdateBanner({ className = "" }: { className?: string }) {
         type="button"
         aria-label="Dismiss"
         className="rounded-lg p-1 text-muted hover:bg-surface-2 hover:text-ink"
-        onClick={() => {
-          dismiss(info.latestCommit);
-          setHidden(true);
-        }}
+        onClick={() => setDismissed(true)}
       >
         <X className="size-4" />
       </button>

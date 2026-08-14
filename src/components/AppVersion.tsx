@@ -4,13 +4,16 @@ import { metaApi } from "../api";
 export function useAppVersion() {
   return useQuery({
     queryKey: ["app-version"],
-    queryFn: () => metaApi.version(),
-    staleTime: 10 * 60 * 1000,
+    queryFn: () => metaApi.version(true),
+    staleTime: 0,
+    gcTime: 5 * 60 * 1000,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
     retry: 1,
   });
 }
 
-/** Compact version label, e.g. "v1.2.0" or "v1.2.0 · a1b2c3d" */
+/** Compact version label, e.g. "v1.2.1" or "v1.2.1 · a1b2c3d" */
 export function AppVersionLabel({
   className = "",
   showCommit = false,
@@ -19,15 +22,26 @@ export function AppVersionLabel({
   showCommit?: boolean;
 }) {
   const q = useAppVersion();
-  if (!q.data) {
+  if (q.isLoading && !q.data) {
     return <span className={className}>…</span>;
+  }
+  if (!q.data) {
+    return <span className={className}>v?</span>;
   }
   const commit =
     showCommit && q.data.currentCommit ? ` · ${q.data.currentCommit}` : "";
   return (
-    <span className={className} title={q.data.latestMessage || undefined}>
+    <span
+      className={className}
+      title={
+        q.data.updateAvailable
+          ? `Update available${q.data.latestVersion ? ` (v${q.data.latestVersion})` : ""}`
+          : q.data.latestMessage || undefined
+      }
+    >
       v{q.data.currentVersion}
       {commit}
+      {q.data.updateAvailable ? " · update available" : ""}
     </span>
   );
 }
