@@ -25,34 +25,57 @@ type AppContextValue = {
 const AppContext = createContext<AppContextValue | null>(null);
 
 function consoleUrl(t: ConsoleTarget): string {
-  const qs = new URLSearchParams({
-    name: t.name,
-    // Bust cache / force a fresh document so reopening never reuses a stale session.
-    t: String(Date.now()),
-  });
+  const qs = new URLSearchParams({ name: t.name });
   return `/console/${encodeURIComponent(t.type)}/${encodeURIComponent(t.node)}/${t.vmid}?${qs}`;
 }
 
-/** Open shell in a detached popup (falls back to a new tab if blocked). */
+function consoleWindowName(t: ConsoleTarget): string {
+  return `proxpanel-shell-${t.type}-${t.node}-${t.vmid}`;
+}
+
+/**
+ * Open (or restore) a detached shell window.
+ * If a shell for this guest is already open, just focus it — like un-minimizing.
+ */
 export function openDetachedConsole(t: ConsoleTarget) {
   const url = consoleUrl(t);
-  const winName = `proxpanel-shell-${t.type}-${t.node}-${t.vmid}`;
+  const winName = consoleWindowName(t);
   const features =
     "popup=yes,width=1100,height=720,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=no";
-  const win = window.open(url, winName, features);
+
+  let win: Window | null = null;
+  try {
+    // Empty URL returns an existing named window without navigating away.
+    win = window.open("", winName, features);
+  } catch {
+    win = null;
+  }
+
   if (!win) {
     window.open(url, "_blank", "noopener,noreferrer");
     return;
   }
+
   try {
-    // Same window name reuses the popup — force navigate to the fresh URL.
-    if (win.location.href !== url && win.location.href !== "about:blank") {
-      win.location.href = url;
+    const path = win.location.pathname || "";
+    const alreadyOpen =
+      !win.closed &&
+      win.location.origin === window.location.origin &&
+      path.includes("/console/");
+    if (alreadyOpen) {
+      win.focus();
+      return;
     }
   } catch {
-    /* cross-opaque briefly during load — ignore */
+    /* about:blank during first create */
   }
+
+  win.location.href = url;
   win.focus();
+}
+
+export function shellStorageKey(type: string, node: string, vmid: string | number): string {
+  return `proxpanel.shell.buffer.${type}.${node}.${vmid}`;
 }
 
 export function AppProvider({
