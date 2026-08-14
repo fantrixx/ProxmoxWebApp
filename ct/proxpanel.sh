@@ -137,7 +137,7 @@ ensure_template() {
     | sort -V \
     | tail -1)"
 
-  if [[ -z "$tmpl" ]]; then
+  if [[ -z "$tmpl" || "$tmpl" != debian-12-standard*.tar.* ]]; then
     msg_error "Kein debian-12-standard (${arch}) im Online-Katalog."
     msg_error "Manuell: pveam update && pveam available -section system | grep debian-12"
     exit 1
@@ -147,11 +147,11 @@ ensure_template() {
     msg_ok "Template ${tmpl} ist bereits auf ${store}"
   else
     msg_info "Lade ${tmpl} von download.proxmox.com nach ${store} …"
-    pveam download "$store" "$tmpl"
+    pveam download "$store" "$tmpl" >&2
     msg_ok "Template heruntergeladen"
   fi
 
-  printf '%s\n' "$tmpl"
+  TEMPLATE="$tmpl"
 }
 
 ct_ip() {
@@ -338,12 +338,8 @@ create_container() {
     PW_GENERATED=0
   fi
 
-  local TEMPLATE
-  TEMPLATE="$(ensure_template "$TPL_STORAGE")"
-  if [[ "$TEMPLATE" != debian-12-standard*.tar.* ]]; then
-    msg_error "Ungueltiger Template-Name: '${TEMPLATE}'"
-    exit 1
-  fi
+  TEMPLATE=""
+  ensure_template "$TPL_STORAGE"
   msg_ok "Template: ${TEMPLATE}"
 
   msg_info "Erstelle LXC ${CTID} (${HN}) …"
