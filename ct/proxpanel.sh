@@ -29,10 +29,10 @@ CM="${GN}✓${CL}"
 CROSS="${RD}✗${CL}"
 INFO="${BL}ℹ${CL}"
 
-msg_info() { echo -e "${TAB}${YW}${BOLD}→${CL} $1"; }
-msg_ok() { echo -e "${TAB}${CM} ${GN}$1${CL}"; }
+msg_info() { echo -e "${TAB}${YW}${BOLD}→${CL} $1" >&2; }
+msg_ok() { echo -e "${TAB}${CM} ${GN}$1${CL}" >&2; }
 msg_error() { echo -e "${TAB}${CROSS} ${RD}$1${CL}" >&2; }
-msg_warn() { echo -e "${TAB}${YW}!${CL} $1"; }
+msg_warn() { echo -e "${TAB}${YW}!${CL} $1" >&2; }
 
 header_info() {
   clear
@@ -118,20 +118,23 @@ pve_host_ip() {
 
 ensure_template() {
   local store="$1"
-  msg_info "Suche Debian-12-Template auf Storage „${store}“ …"
+  msg_info "Suche Debian-12-Template auf Storage \"${store}\" …"
   pveam update >/dev/null 2>&1 || true
   local tmpl
-  tmpl="$(pveam list "$store" 2>/dev/null | awk '/debian-12-standard/ {print $1}' | sed "s|^${store}:vztmpl/||" | sort -V | tail -1)"
+  tmpl="$(pveam list "$store" 2>/dev/null | awk '/debian-12-standard/ {print $NF}' | sed 's|.*/||' | sort -V | tail -1)"
+  tmpl="${tmpl//$'\r'/}"
+  tmpl="$(printf '%s' "$tmpl" | awk '{$1=$1; print}')"
   if [[ -z "$tmpl" ]]; then
     tmpl="$(pveam available -section system 2>/dev/null | awk '/debian-12-standard.*amd64/ {print $2}' | sort -V | tail -1)"
+    tmpl="${tmpl//$'\r'/}"
     if [[ -z "$tmpl" ]]; then
-      msg_error "Kein debian-12-standard Template gefunden. Prüfe pveam available."
+      msg_error "Kein debian-12-standard Template gefunden. Pruefe pveam available."
       exit 1
     fi
     msg_info "Lade Template ${tmpl} …"
     pveam download "$store" "$tmpl"
   fi
-  echo "$tmpl"
+  printf '%s\n' "$tmpl"
 }
 
 ct_ip() {
@@ -320,6 +323,10 @@ create_container() {
 
   local TEMPLATE
   TEMPLATE="$(ensure_template "$TPL_STORAGE")"
+  if [[ "$TEMPLATE" != debian-12-standard*.tar.* ]]; then
+    msg_error "Ungueltiger Template-Name: '${TEMPLATE}'"
+    exit 1
+  fi
   msg_ok "Template: ${TEMPLATE}"
 
   msg_info "Erstelle LXC ${CTID} (${HN}) …"
@@ -341,7 +348,7 @@ create_container() {
     --features nesting=1 \
     --onboot 1 \
     --password "$PW" \
-    --description "ProxPanel — Proxmox Web-Verwaltung" \
+    --description "ProxPanel - Proxmox Web-Verwaltung" \
     --start 0
   msg_ok "Container ${CTID} angelegt"
 
@@ -358,7 +365,7 @@ create_container() {
   IP="$(ct_ip "$CTID" || true)"
   [[ -z "$IP" ]] && IP="(DHCP-IP in der PVE-UI prüfen)"
 
-  pct set "$CTID" --description "ProxPanel — http://${IP}:${APP_PORT}"
+  pct set "$CTID" --description "ProxPanel - http://${IP}:${APP_PORT}"
 
   echo
   msg_ok "ProxPanel ist installiert"
