@@ -43,9 +43,16 @@ export default function ConsolePage() {
 
     document.title = `Shell · ${kind} ${vmid} · ${name} — ProxPanel`;
 
+    let disposed = false;
+    let ws: WebSocket | null = null;
+    let keepalive: ReturnType<typeof setInterval> | undefined;
+    let connected = false;
+    let sawOutput = false;
+
     const isMobile = window.matchMedia("(max-width: 640px)").matches;
     const term = new Terminal({
       cursorBlink: true,
+      convertEol: true,
       fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
       fontSize: isMobile ? 12 : 14,
       theme: {
@@ -59,65 +66,112 @@ export default function ConsolePage() {
     term.loadAddon(fit);
     term.loadAddon(new WebLinksAddon());
     term.open(wrapRef.current);
-    fit.fit();
-    term.focus();
     termRef.current = term;
-
-    const proto = location.protocol === "https:" ? "wss" : "ws";
-    const qs = new URLSearchParams({
-      type: guestType,
-      node,
-      vmid: String(vmid),
-    });
-    const ws = new WebSocket(`${proto}://${location.host}/ws/console?${qs}`);
-    ws.binaryType = "arraybuffer";
-
-    let keepalive: ReturnType<typeof setInterval> | undefined;
+    term.writeln("\x1b[90mStarting shell…\x1b[0m");
 
     const sendResize = () => {
       fit.fit();
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(encodeResize(term.cols, term.rows));
+      const cols = Math.max(term.cols, 2);
+      const rows = Math.max(term.rows, 1);
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(encodeResize(cols, rows));
       }
     };
 
-    ws.onopen = () => {
-      term.writeln("\x1b[90mConnecting to Proxmox console…\x1b[0m");
-      sendResize();
-      keepalive = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) ws.send("2");
-      }, 30_000);
-    };
-    ws.onmessage = (ev) => {
-      if (typeof ev.data === "string") {
-        term.write(ev.data);
-      } else {
-        term.write(new Uint8Array(ev.data as ArrayBuffer));
+    const onResizeDisposable = term.onResize(() => {
+      if (connected && ws?.readyState === WebSocket.OPEN) {
+        ws.send(encodeResize(Math.max(term.cols, 2), Math.max(term.rows, 1)));
       }
-    };
-    ws.onerror = () => term.writeln("\r\n\x1b[31mWebSocket error\x1b[0m");
-    ws.onclose = (ev) => {
-      const reason = ev.reason || `Code ${ev.code}`;
-      term.writeln(`\r\n\x1b[90mConsole closed (${reason})\x1b[0m`);
-    };
-
-    const onData = term.onData((data) => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(encodeInput(data));
     });
 
-    const onResize = () => sendResize();
-    window.addEventListener("resize", onResize);
+    const onData = term.onData((data) => {
+      if (!connected || !ws || ws.readyState !== WebSocket.OPEN) return;
+      ws.send(encodeInput(data));
+    });
 
     const wrapEl = wrapRef.current;
     const onPointer = () => term.focus();
     wrapEl.addEventListener("pointerdown", onPointer);
 
+    const connect = () => {
+      if (disposed || ws) return;
+      fit.fit();
+
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      const qs = new URLSearchParams({
+        type: guestType,
+        node,
+        vmid: String(vmid),
+      });
+      ws = new WebSocket(`${proto}://${location.host}/ws/console?${qs}`);
+      ws.binaryType = "arraybuffer";
+
+      ws.onopen = () => {
+        if (disposed) return;
+        // Resize may arrive at the proxy before Proxmox is ready — it is queued server-side.
+        sendResize();
+        keepalive = setInterval(() => {
+          if (ws?.readyState === WebSocket.OPEN) ws.send("2");
+        }, 30_000);
+      };
+
+      ws.onmessage = (ev) => {
+        if (disposed) return;
+        if (!sawOutput) {
+          sawOutput = true;
+          connected = true;
+          term.reset();
+          sendResize();
+          term.focus();
+        }
+        if (typeof ev.data === "string") {
+          term.write(ev.data);
+        } else {
+          term.write(new Uint8Array(ev.data as ArrayBuffer));
+        }
+      };
+
+      ws.onerror = () => {
+        if (!disposed) term.writeln("\r\n\x1b[31mWebSocket error\x1b[0m");
+      };
+
+      ws.onclose = (ev) => {
+        connected = false;
+        if (disposed) return;
+        const reason = ev.reason || `Code ${ev.code}`;
+        term.writeln(`\r\n\x1b[90mConsole closed (${reason})\x1b[0m`);
+      };
+    };
+
+    // Wait until the popup has a real layout — 0×0 resize breaks the PTY.
+    const ro = new ResizeObserver(() => {
+      fit.fit();
+      if (!ws && wrapEl.clientWidth > 40 && wrapEl.clientHeight > 40) {
+        connect();
+      } else if (ws?.readyState === WebSocket.OPEN) {
+        sendResize();
+      }
+    });
+    ro.observe(wrapEl);
+
+    // Fallback if ResizeObserver does not fire promptly.
+    const bootTimer = window.setTimeout(() => {
+      if (!ws) connect();
+    }, 300);
+
+    const onWinResize = () => sendResize();
+    window.addEventListener("resize", onWinResize);
+
     return () => {
+      disposed = true;
+      window.clearTimeout(bootTimer);
+      ro.disconnect();
       onData.dispose();
+      onResizeDisposable.dispose();
       if (keepalive) clearInterval(keepalive);
-      window.removeEventListener("resize", onResize);
+      window.removeEventListener("resize", onWinResize);
       wrapEl.removeEventListener("pointerdown", onPointer);
-      ws.close();
+      ws?.close();
       term.dispose();
       termRef.current = null;
       document.title = "ProxPanel — Proxmox Administration";

@@ -25,22 +25,34 @@ type AppContextValue = {
 const AppContext = createContext<AppContextValue | null>(null);
 
 function consoleUrl(t: ConsoleTarget): string {
-  const qs = new URLSearchParams({ name: t.name });
+  const qs = new URLSearchParams({
+    name: t.name,
+    // Bust cache / force a fresh document so reopening never reuses a stale session.
+    t: String(Date.now()),
+  });
   return `/console/${encodeURIComponent(t.type)}/${encodeURIComponent(t.node)}/${t.vmid}?${qs}`;
 }
 
 /** Open shell in a detached popup (falls back to a new tab if blocked). */
 export function openDetachedConsole(t: ConsoleTarget) {
   const url = consoleUrl(t);
-  const name = `proxpanel-shell-${t.type}-${t.node}-${t.vmid}`;
+  const winName = `proxpanel-shell-${t.type}-${t.node}-${t.vmid}`;
   const features =
     "popup=yes,width=1100,height=720,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=no";
-  const win = window.open(url, name, features);
+  const win = window.open(url, winName, features);
   if (!win) {
     window.open(url, "_blank", "noopener,noreferrer");
-  } else {
-    win.focus();
+    return;
   }
+  try {
+    // Same window name reuses the popup — force navigate to the fresh URL.
+    if (win.location.href !== url && win.location.href !== "about:blank") {
+      win.location.href = url;
+    }
+  } catch {
+    /* cross-opaque briefly during load — ignore */
+  }
+  win.focus();
 }
 
 export function AppProvider({

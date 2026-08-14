@@ -1,6 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import https from "node:https";
-import { WebSocketServer, WebSocket } from "ws";
+import { WebSocketServer, WebSocket, type RawData } from "ws";
 import { parse as parseCookie } from "cookie";
 import { COOKIE_NAME, getSession, type Session } from "./session.ts";
 import { pveRequest, ProxmoxApiError } from "./proxmox.ts";
@@ -15,6 +15,13 @@ type TermProxy = {
 function getSessionFromUpgrade(req: IncomingMessage): Session | undefined {
   const cookies = parseCookie(req.headers.cookie || "");
   return getSession(cookies[COOKIE_NAME]);
+}
+
+function toBuffer(data: RawData): Buffer {
+  if (Buffer.isBuffer(data)) return data;
+  if (data instanceof ArrayBuffer) return Buffer.from(data);
+  if (Array.isArray(data)) return Buffer.concat(data);
+  return Buffer.from(data);
 }
 
 export function attachConsoleProxy(wss: WebSocketServer) {
@@ -37,6 +44,8 @@ export function attachConsoleProxy(wss: WebSocketServer) {
 
     let pveWs: WebSocket | null = null;
     let closed = false;
+    let ready = false;
+    const pending: RawData[] = [];
     let pingTimer: ReturnType<typeof setInterval> | undefined;
 
     const shutdown = (code = 1000, reason = "Console closed") => {
@@ -55,8 +64,25 @@ export function attachConsoleProxy(wss: WebSocketServer) {
       }
     };
 
+    const flushPending = () => {
+      if (!pveWs || pveWs.readyState !== WebSocket.OPEN) return;
+      for (const msg of pending) {
+        pveWs.send(msg);
+      }
+      pending.length = 0;
+    };
+
     client.on("close", () => shutdown());
     client.on("error", () => shutdown(1011, "Client error"));
+
+    // Queue early client traffic (resize/input) until Proxmox answers OK.
+    client.on("message", (data) => {
+      if (!pveWs || pveWs.readyState !== WebSocket.OPEN || !ready) {
+        pending.push(data);
+        return;
+      }
+      pveWs.send(data);
+    });
 
     try {
       const proxy = await pveRequest<TermProxy>(
@@ -78,7 +104,8 @@ export function attachConsoleProxy(wss: WebSocketServer) {
         headers.Authorization = `PVEAPIToken=${session.auth.tokenId}=${session.auth.secret}`;
       }
 
-      pveWs = new WebSocket(wsUrl, {
+      // Official pve-xtermjs uses the "binary" subprotocol.
+      pveWs = new WebSocket(wsUrl, "binary", {
         rejectUnauthorized: session.rejectUnauthorized,
         headers,
         agent: new https.Agent({
@@ -95,18 +122,31 @@ export function attachConsoleProxy(wss: WebSocketServer) {
       });
 
       pveWs.on("message", (data) => {
-        if (client.readyState === WebSocket.OPEN) client.send(data);
+        if (client.readyState !== WebSocket.OPEN) return;
+
+        if (!ready) {
+          const buf = toBuffer(data);
+          if (buf.length >= 2 && buf[0] === 0x4f && buf[1] === 0x4b) {
+            // First reply is ASCII "OK" — strip it, then start the real session.
+            ready = true;
+            const rest = buf.subarray(2);
+            if (rest.length > 0) client.send(rest);
+            flushPending();
+            return;
+          }
+          // Unexpected greeting — still forward so the user sees an error hint.
+          ready = true;
+          client.send(data);
+          flushPending();
+          return;
+        }
+
+        client.send(data);
       });
 
       pveWs.on("close", () => shutdown(1000, "Proxmox console closed"));
       pveWs.on("error", (err) => {
         shutdown(1011, err.message.slice(0, 120));
-      });
-
-      client.on("message", (data) => {
-        if (pveWs && pveWs.readyState === WebSocket.OPEN) {
-          pveWs.send(data);
-        }
       });
     } catch (err) {
       const message =

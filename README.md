@@ -47,7 +47,7 @@ UPDATE=1 bash -c "$(wget -qLO - https://raw.githubusercontent.com/fantrixx/Proxm
 
 ## Versioning
 
-The app version comes from `version` in `package.json` (currently **1.2.0**). It is shown on the login screen and in the UI after sign-in (header badge and sidebar). Git commit comparison against GitHub is used separately to detect available updates.
+The app version comes from `version` in `package.json` (currently **1.2.1**). It is shown on the login screen and in the UI after sign-in (header badge and sidebar). Git commit comparison against GitHub is used separately to detect available updates.
 
 ## Features
 
