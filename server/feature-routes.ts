@@ -147,8 +147,8 @@ async function listGuestBackups(
   session: Session,
   node: string,
   vmid: number,
-): Promise<ContentRow[]> {
-  const backups: ContentRow[] = [];
+): Promise<(ContentRow & { node: string; storage: string })[]> {
+  const backups: (ContentRow & { node: string; storage: string })[] = [];
   const storages = await listNodeStorages(session, node);
 
   for (const store of storages) {
@@ -162,7 +162,13 @@ async function listGuestBackups(
         { content: "backup", vmid },
       );
       for (const row of rows || []) {
-        backups.push({ ...row, volid: row.volid });
+        const { storage } = parseVolid(row.volid);
+        backups.push({
+          ...row,
+          volid: row.volid,
+          node,
+          storage: storage || store.storage,
+        });
       }
     } catch {
       /* skip */
