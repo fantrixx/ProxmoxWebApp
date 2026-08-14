@@ -1,8 +1,10 @@
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
+  CalendarClock,
   HardDriveDownload,
   Loader2,
   Play,
@@ -11,19 +13,22 @@ import {
   Square,
   TerminalSquare,
 } from "lucide-react";
-import type { ClusterResource, GuestRates, GuestType } from "../types";
+import type { ClusterResource, GuestRates, GuestType, MediaItem } from "../types";
 import {
   cpuPct,
   formatBytes,
   formatBytesRate,
+  formatSnapTime,
   formatUptime,
   guestLabel,
   usagePct,
 } from "../format";
+import { dataApi } from "../api";
 import { MetricBar } from "./MetricBar";
 import { StatusBadge } from "./StatusBadge";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { BackupDialog } from "./BackupDialog";
+import { ScheduleDialog } from "./ScheduleDialog";
 import { IpList } from "./IpList";
 import { useApp } from "../context";
 import { useGuestAction } from "../hooks";
@@ -43,6 +48,7 @@ export function GuestCard({
   const action = useGuestAction();
   const [confirm, setConfirm] = useState<PowerKind | null>(null);
   const [backupOpen, setBackupOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const running = guest.status === "running";
   const type = (guest.type === "qemu" ? "qemu" : "lxc") as GuestType;
   const busy = action.isPending;
@@ -230,23 +236,20 @@ export function GuestCard({
           disabled={busy || !running || backingUp}
           onClick={shell}
         />
-        <ActionBtn
-          icon={
-            backingUp ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <HardDriveDownload className="size-3.5" />
-            )
-          }
-          label={
-            backingUp
-              ? backup?.progress != null
-                ? `${Math.round(backup.progress)}%`
-                : "Backup…"
-              : "Backup"
-          }
+        <BackupActionBtn
+          node={guest.node}
+          type={type}
+          vmid={guest.vmid}
+          backingUp={backingUp}
+          progress={backup?.progress}
           disabled={busy || backingUp || !guest.node || guest.vmid == null}
           onClick={() => setBackupOpen(true)}
+        />
+        <ActionBtn
+          icon={<CalendarClock className="size-3.5" />}
+          label="Schedule"
+          disabled={busy || !guest.node || guest.vmid == null}
+          onClick={() => setScheduleOpen(true)}
         />
       </div>
 
@@ -272,7 +275,118 @@ export function GuestCard({
           name={guest.name}
         />
       ) : null}
+
+      {guest.node && guest.vmid != null ? (
+        <ScheduleDialog
+          open={scheduleOpen}
+          onClose={() => setScheduleOpen(false)}
+          node={guest.node}
+          type={type}
+          vmid={guest.vmid}
+          name={guest.name}
+        />
+      ) : null}
     </article>
+  );
+}
+
+function backupStorageOf(item: MediaItem): string {
+  if (item.storage) return item.storage;
+  const idx = item.volid.indexOf(":");
+  return idx > 0 ? item.volid.slice(0, idx) : item.volid;
+}
+
+function BackupActionBtn({
+  node,
+  type,
+  vmid,
+  backingUp,
+  progress,
+  disabled,
+  onClick,
+}: {
+  node?: string;
+  type: GuestType;
+  vmid?: number;
+  backingUp: boolean;
+  progress?: number | null;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  const [hover, setHover] = useState(false);
+  const enabled = hover && Boolean(node) && vmid != null && !backingUp;
+
+  const q = useQuery({
+    queryKey: ["guestBackups", node, type, String(vmid)],
+    queryFn: () => dataApi.guestBackups(node!, type, String(vmid)),
+    enabled,
+    staleTime: 60_000,
+  });
+
+  const last = useMemo(() => {
+    const list = q.data?.backups || [];
+    if (!list.length) return null;
+    return [...list].sort((a, b) => (b.ctime || 0) - (a.ctime || 0))[0];
+  }, [q.data]);
+
+  const label = backingUp
+    ? progress != null
+      ? `${Math.round(progress)}%`
+      : "Backup…"
+    : "Backup";
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onFocus={() => setHover(true)}
+      onBlur={() => setHover(false)}
+    >
+      <ActionBtn
+        icon={
+          backingUp ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <HardDriveDownload className="size-3.5" />
+          )
+        }
+        label={label}
+        disabled={disabled}
+        onClick={onClick}
+      />
+      {hover && !backingUp ? (
+        <div
+          role="tooltip"
+          className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 w-56 -translate-x-1/2 rounded-xl border border-line bg-bg px-3 py-2 text-left text-xs shadow-xl"
+        >
+          <div className="mb-1 font-medium text-ink">Last backup</div>
+          {q.isLoading ? (
+            <p className="text-muted">Loading…</p>
+          ) : q.isError ? (
+            <p className="text-bad">{(q.error as Error).message}</p>
+          ) : !last ? (
+            <p className="text-muted">No backup yet</p>
+          ) : (
+            <div className="space-y-0.5 text-muted">
+              <p>
+                <span className="text-ink/80">When:</span> {formatSnapTime(last.ctime)}
+              </p>
+              <p>
+                <span className="text-ink/80">Where:</span>{" "}
+                <span className="font-mono text-ink/90">{backupStorageOf(last)}</span>
+                {last.node ? ` @ ${last.node}` : ""}
+              </p>
+              {last.size != null ? (
+                <p>
+                  <span className="text-ink/80">Size:</span> {formatBytes(last.size)}
+                </p>
+              ) : null}
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -302,7 +416,7 @@ function ActionBtn({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border px-3 py-2.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-0 sm:px-2.5 sm:py-1.5 ${primary ? "border-transparent" : ""} ${tone}`}
+      className={`inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-0 sm:w-auto sm:px-2.5 sm:py-1.5 ${primary ? "border-transparent" : ""} ${tone}`}
     >
       {icon}
       {label}

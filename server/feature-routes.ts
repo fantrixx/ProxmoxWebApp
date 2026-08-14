@@ -742,6 +742,7 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
         res.status(400).json({ error: "Invalid type." });
         return;
       }
+      const existing = (await listSchedules()).find((s) => s.id === body.id);
       const schedule: PowerSchedule = {
         id: body.id || crypto.randomUUID(),
         node: body.node,
@@ -752,7 +753,8 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
         action: body.action,
         time: body.time,
         days: Array.isArray(body.days) ? body.days : [],
-        lastRunKey: body.lastRunKey,
+        lastRunKey: body.lastRunKey ?? existing?.lastRunKey,
+        lastRunAt: body.lastRunAt ?? existing?.lastRunAt,
       };
       await upsertSchedule(schedule);
       res.json({ schedule });

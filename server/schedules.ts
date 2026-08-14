@@ -18,6 +18,8 @@ export type PowerSchedule = {
   /** 0=Sun .. 6=Sat, empty = every day */
   days: number[];
   lastRunKey?: string;
+  /** Unix epoch seconds when the schedule last executed successfully */
+  lastRunAt?: number;
 };
 
 const DATA_FILE = path.resolve(
@@ -54,12 +56,19 @@ export async function upsertSchedule(schedule: PowerSchedule): Promise<PowerSche
   const schedules = await readAll();
   const idx = schedules.findIndex((s) => s.id === schedule.id);
   if (idx >= 0) {
-    schedules[idx] = schedule;
+    const prev = schedules[idx];
+    schedules[idx] = {
+      ...schedule,
+      // Keep run history unless the client explicitly sends new values.
+      lastRunKey:
+        schedule.lastRunKey !== undefined ? schedule.lastRunKey : prev.lastRunKey,
+      lastRunAt: schedule.lastRunAt !== undefined ? schedule.lastRunAt : prev.lastRunAt,
+    };
   } else {
     schedules.push(schedule);
   }
   await writeAll(schedules);
-  return schedule;
+  return schedules.find((s) => s.id === schedule.id) || schedule;
 }
 
 export async function deleteSchedule(id: string): Promise<boolean> {
@@ -107,6 +116,7 @@ export function startScheduleRunner(getSession: () => Session | null): void {
           `/nodes/${encodeURIComponent(schedule.node)}/${schedule.type}/${encodeURIComponent(String(schedule.vmid))}/status/${schedule.action}`,
         );
         schedule.lastRunKey = key;
+        schedule.lastRunAt = Math.floor(Date.now() / 1000);
         changed = true;
       } catch (err) {
         console.error(

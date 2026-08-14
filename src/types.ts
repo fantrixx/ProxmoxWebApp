@@ -145,4 +145,6 @@ export type PowerSchedule = {
   time: string;
   days: number[];
   lastRunKey?: string;
+  /** Unix epoch seconds of last successful run */
+  lastRunAt?: number;
 };

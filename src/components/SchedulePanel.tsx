@@ -1,12 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { dataApi } from "../api";
+import { formatSnapTime } from "../format";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { useApp } from "../context";
 import { newId } from "../id";
 import type { GuestType, PowerSchedule } from "../types";
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function lastRunLabel(schedule: PowerSchedule): string {
+  if (schedule.lastRunAt) return formatSnapTime(schedule.lastRunAt);
+  if (schedule.lastRunKey) {
+    const parsed = Date.parse(schedule.lastRunKey);
+    if (Number.isFinite(parsed)) return formatSnapTime(Math.floor(parsed / 1000));
+    return schedule.lastRunKey.replace("T", " ");
+  }
+  return "Never";
+}
 
 const emptyForm = (): Omit<PowerSchedule, "id"> & { id?: string } => ({
   node: "",
@@ -101,6 +112,7 @@ export function SchedulePanel({
         time: form.time,
         days: form.days,
         lastRunKey: editing?.lastRunKey,
+        lastRunAt: editing?.lastRunAt,
       };
       return dataApi.saveSchedule(schedule);
     },
@@ -163,9 +175,9 @@ export function SchedulePanel({
       ) : guestSchedules.length === 0 && !showForm ? (
         <p className="text-sm text-muted">No schedules for this guest.</p>
       ) : (
-        <ul className="mb-4 divide-y divide-line">
+        <ul className="mb-4 max-h-64 divide-y divide-line overflow-y-auto rounded-xl border border-line">
           {guestSchedules.map((s) => (
-            <li key={s.id} className="flex flex-wrap items-center gap-3 py-3">
+            <li key={s.id} className="flex flex-wrap items-center gap-3 px-3 py-3">
               <div className="min-w-0 flex-1">
                 <div className="font-medium">
                   {s.action} at {s.time}
@@ -177,6 +189,9 @@ export function SchedulePanel({
                   {s.days.length === 0
                     ? "Every day"
                     : s.days.map((d) => DAY_LABELS[d]).join(", ")}
+                </div>
+                <div className="mt-1 text-[11px] text-muted">
+                  Last run: <span className="text-ink/80">{lastRunLabel(s)}</span>
                 </div>
               </div>
               <button
