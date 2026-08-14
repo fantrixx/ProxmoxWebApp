@@ -1,5 +1,6 @@
 import { useCallback, useContext, useEffect, useMemo, useState, createContext, type ReactNode } from "react";
 import { dataApi } from "./api";
+import { newId } from "./id";
 import type { AuthUser, GuestType } from "./types";
 
 export type ConsoleTarget = {
@@ -145,7 +146,7 @@ export function AppProvider({
   }, [jobs]);
 
   const toast = useCallback((kind: Toast["kind"], text: string) => {
-    const id = crypto.randomUUID();
+    const id = newId();
     setToasts((prev) => [...prev, { id, kind, text }]);
     window.setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -173,7 +174,7 @@ export function AppProvider({
   }, []);
 
   const trackJob = useCallback((job: Omit<ActiveJob, "id" | "startedAt">) => {
-    const id = crypto.randomUUID();
+    const id = newId();
     setJobs((prev) => {
       const rest = job.upid ? prev.filter((j) => j.upid !== job.upid) : prev;
       return [...rest, { ...job, id, startedAt: Date.now() }];

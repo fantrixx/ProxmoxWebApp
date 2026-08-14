@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { dataApi } from "../api";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { useApp } from "../context";
+import { newId } from "../id";
 import type { GuestType, PowerSchedule } from "../types";
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -90,7 +91,7 @@ export function SchedulePanel({
   const save = useMutation({
     mutationFn: () => {
       const schedule: PowerSchedule = {
-        id: editing?.id || crypto.randomUUID(),
+        id: editing?.id || newId(),
         node: form.node,
         type: form.type as GuestType,
         vmid: Number(form.vmid),
