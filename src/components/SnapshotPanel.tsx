@@ -95,7 +95,7 @@ export function SnapshotPanel({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="vor-update"
-            className="w-full rounded-xl border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
+            className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-base outline-none focus:border-accent md:text-sm"
             required
           />
         </label>
@@ -105,13 +105,13 @@ export function SnapshotPanel({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="optional"
-            className="w-full rounded-xl border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
+            className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-base outline-none focus:border-accent md:text-sm"
           />
         </label>
         <button
           type="submit"
           disabled={busy || !name.trim()}
-          className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-black hover:bg-accent-2 disabled:opacity-40"
+          className="min-h-11 rounded-xl bg-accent px-4 py-2.5 text-sm font-medium text-black hover:bg-accent-2 disabled:opacity-40 sm:min-h-0 sm:py-2"
         >
           {create.isPending ? "Erstelle…" : "Anlegen"}
         </button>
@@ -148,7 +148,7 @@ export function SnapshotPanel({
                 type="button"
                 disabled={busy}
                 onClick={() => setPending({ kind: "rollback", snap })}
-                className="rounded-lg border border-line px-2.5 py-1.5 text-xs hover:bg-surface-2 disabled:opacity-40"
+                className="min-h-11 flex-1 rounded-lg border border-line px-2.5 py-2 text-xs hover:bg-surface-2 disabled:opacity-40 sm:min-h-0 sm:flex-none sm:py-1.5"
               >
                 Zurückrollen
               </button>
@@ -156,7 +156,7 @@ export function SnapshotPanel({
                 type="button"
                 disabled={busy}
                 onClick={() => setPending({ kind: "delete", snap })}
-                className="rounded-lg border border-bad/40 px-2.5 py-1.5 text-xs text-bad hover:bg-bad/10 disabled:opacity-40"
+                className="min-h-11 flex-1 rounded-lg border border-bad/40 px-2.5 py-2 text-xs text-bad hover:bg-bad/10 disabled:opacity-40 sm:min-h-0 sm:flex-none sm:py-1.5"
               >
                 Löschen
               </button>

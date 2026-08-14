@@ -17,40 +17,65 @@ const items = [
 export function Sidebar() {
   const { pathname } = useLocation();
 
+  function isActive(item: (typeof items)[number]) {
+    return item.exact ? pathname === item.to : pathname.startsWith(item.to);
+  }
+
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-line bg-bg-2">
-      <div className="flex items-center gap-2.5 px-5 py-5">
-        <div className="grid size-9 place-items-center rounded-xl bg-accent text-black">
-          <Cpu className="size-5" />
+    <>
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-line bg-bg-2 md:flex">
+        <div className="flex items-center gap-2.5 px-5 py-5">
+          <div className="grid size-9 place-items-center rounded-xl bg-accent text-black">
+            <Cpu className="size-5" />
+          </div>
+          <div>
+            <div className="text-sm font-semibold tracking-tight">ProxPanel</div>
+            <div className="text-[11px] text-muted">Proxmox Verwaltung</div>
+          </div>
         </div>
-        <div>
-          <div className="text-sm font-semibold tracking-tight">ProxPanel</div>
-          <div className="text-[11px] text-muted">Proxmox Verwaltung</div>
+        <nav className="flex flex-1 flex-col gap-1 px-3">
+          {items.map((item) => {
+            const Icon = item.icon;
+            const active = isActive(item);
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm transition ${
+                  active
+                    ? "bg-surface text-ink"
+                    : "text-muted hover:bg-surface/60 hover:text-ink"
+                }`}
+              >
+                <Icon className="size-4" />
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+        <p className="px-5 py-4 text-[11px] text-muted">Live-Daten alle 3 Sekunden</p>
+      </aside>
+
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-bg-2/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+        <div className="grid grid-cols-4">
+          {items.map((item) => {
+            const Icon = item.icon;
+            const active = isActive(item);
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={`flex min-h-14 flex-col items-center justify-center gap-1 text-[11px] ${
+                  active ? "text-accent" : "text-muted"
+                }`}
+              >
+                <Icon className="size-5" />
+                {item.label}
+              </Link>
+            );
+          })}
         </div>
-      </div>
-      <nav className="flex flex-1 flex-col gap-1 px-3">
-        {items.map((item) => {
-          const active = item.exact
-            ? pathname === item.to
-            : pathname.startsWith(item.to);
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm transition ${
-                active
-                  ? "bg-surface text-ink"
-                  : "text-muted hover:bg-surface/60 hover:text-ink"
-              }`}
-            >
-              <Icon className="size-4" />
-              {item.label}
-            </Link>
-          );
-        })}
       </nav>
-      <p className="px-5 py-4 text-[11px] text-muted">Live-Daten alle 3 Sekunden</p>
-    </aside>
+    </>
   );
 }

@@ -81,7 +81,7 @@ export default function GuestDetail() {
         title={name}
         subtitle={`${guestLabel(guestType)} ${vmid} auf ${node}`}
       />
-      <div className="space-y-6 px-8 py-6">
+      <div className="space-y-6 px-4 py-4 md:px-8 md:py-6">
         <Link to="/" className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
           <ArrowLeft className="size-4" />
           Zurück
@@ -91,11 +91,13 @@ export default function GuestDetail() {
           <p className="text-sm text-bad">{(q.error as Error).message}</p>
         ) : null}
 
-        <div className="flex flex-wrap items-center gap-3">
-          <StatusBadge status={status?.status} />
-          <span className="text-sm text-muted">{formatUptime(status?.uptime)}</span>
-          <IpList ips={q.data?.ips} />
-          <div className="ml-auto flex flex-wrap gap-2">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <StatusBadge status={status?.status} />
+            <span className="text-sm text-muted">{formatUptime(status?.uptime)}</span>
+            <IpList ips={q.data?.ips} />
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
             {running ? (
               <>
                 <Btn onClick={() => setConfirm("shutdown")} disabled={action.isPending}>
@@ -224,7 +226,7 @@ function Btn({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium disabled:opacity-40 ${tone}`}
+      className={`inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2.5 text-xs font-medium disabled:opacity-40 sm:min-h-0 sm:w-auto sm:py-1.5 ${tone}`}
     >
       {children}
     </button>

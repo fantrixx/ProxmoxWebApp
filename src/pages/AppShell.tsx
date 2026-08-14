@@ -10,9 +10,9 @@ const TerminalModal = lazy(() =>
 
 export default function AppShell() {
   return (
-    <div className="flex min-h-screen bg-bg">
+    <div className="flex min-h-dvh bg-bg">
       <Sidebar />
-      <main className="min-w-0 flex-1">
+      <main className="min-w-0 flex-1 pb-20 md:pb-0">
         <Outlet />
       </main>
       <ConsoleHost />

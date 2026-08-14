@@ -14,10 +14,11 @@ export function TerminalModal() {
   useEffect(() => {
     if (!consoleTarget || !wrapRef.current) return;
 
+    const isMobile = window.matchMedia("(max-width: 640px)").matches;
     const term = new Terminal({
       cursorBlink: true,
       fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
-      fontSize: 14,
+      fontSize: isMobile ? 12 : 14,
       theme: {
         background: "#0b0d12",
         foreground: "#eef3fb",
@@ -83,21 +84,21 @@ export function TerminalModal() {
   const kind = consoleTarget.type === "lxc" ? "CT" : "VM";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
-      <div className="flex h-[min(860px,92vh)] w-[min(1100px,96vw)] flex-col overflow-hidden rounded-2xl border border-line bg-bg shadow-2xl">
-        <div className="flex items-center justify-between border-b border-line px-4 py-3">
-          <div>
-            <div className="text-sm font-medium">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/80 p-0 md:items-center md:p-6">
+      <div className="flex h-full w-full flex-col overflow-hidden border-line bg-bg shadow-2xl md:h-[min(860px,92vh)] md:w-[min(1100px,96vw)] md:rounded-2xl md:border">
+        <div className="flex items-center justify-between gap-3 border-b border-line px-3 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:px-4">
+          <div className="min-w-0">
+            <div className="truncate text-sm font-medium">
               Shell · {kind} {consoleTarget.vmid} · {consoleTarget.name}
             </div>
-            <div className="text-[11px] text-muted">
+            <div className="hidden text-[11px] text-muted sm:block">
               Node {consoleTarget.node} · Esc zum Schließen
             </div>
           </div>
           <button
             type="button"
             onClick={closeConsole}
-            className="rounded-lg p-2 text-muted hover:bg-surface hover:text-ink"
+            className="min-h-11 min-w-11 shrink-0 rounded-lg p-2 text-muted hover:bg-surface hover:text-ink"
           >
             <X className="size-4" />
           </button>

@@ -89,8 +89,8 @@ export default function Login() {
   }
 
   return (
-    <div className="bg-grid min-h-screen">
-      <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6">
+    <div className="bg-grid min-h-dvh">
+      <div className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4 py-8 sm:px-6">
         <div className="mb-8 flex items-center gap-3">
           <div className="grid size-12 place-items-center rounded-2xl bg-accent text-black">
             <Cpu className="size-6" />
@@ -111,7 +111,7 @@ export default function Login() {
               value={host}
               onChange={(e) => setHost(e.target.value)}
               placeholder="https://192.168.1.10:8006"
-              className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-sm outline-none focus:border-accent"
+              className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent md:text-sm"
               autoComplete="url"
               required={!hasToken}
             />
@@ -123,7 +123,7 @@ export default function Login() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="root"
-                className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-sm outline-none focus:border-accent"
+                className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent md:text-sm"
                 autoComplete="username"
                 required={!hasToken}
               />
@@ -133,7 +133,7 @@ export default function Login() {
               <select
                 value={realm}
                 onChange={(e) => setRealm(e.target.value)}
-                className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-sm outline-none focus:border-accent"
+                className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent md:text-sm"
               >
                 <option value="pam">pam (Linux)</option>
                 <option value="pve">pve</option>
@@ -146,7 +146,7 @@ export default function Login() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-sm outline-none focus:border-accent"
+              className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent md:text-sm"
               autoComplete="current-password"
               required={!hasToken}
             />
@@ -170,7 +170,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={pending}
-            className="w-full rounded-xl bg-accent py-2.5 text-sm font-semibold text-black hover:bg-accent-2 disabled:opacity-50"
+            className="min-h-12 w-full rounded-xl bg-accent py-3 text-sm font-semibold text-black hover:bg-accent-2 disabled:opacity-50"
           >
             {pending ? "Verbinde…" : "Anmelden"}
           </button>

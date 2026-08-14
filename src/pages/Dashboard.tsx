@@ -48,7 +48,7 @@ export default function Dashboard() {
             : view.clusterName
         }
       />
-      <div className="space-y-8 px-8 py-6">
+      <div className="space-y-6 px-4 py-4 md:space-y-8 md:px-8 md:py-6">
         {q.isError ? (
           <p className="rounded-xl border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad">
             {(q.error as Error).message}
@@ -75,15 +75,15 @@ export default function Dashboard() {
         </section>
 
         <section>
-          <div className="mb-3 flex items-center justify-between gap-4">
+          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-sm font-medium text-muted">Container & VMs</h2>
-            <div className="relative">
-              <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-muted" />
+            <div className="relative w-full sm:w-64">
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
               <input
                 value={qtext}
                 onChange={(e) => setQtext(e.target.value)}
                 placeholder="Suchen…"
-                className="w-64 rounded-xl border border-line bg-surface py-2 pr-3 pl-9 text-sm outline-none focus:border-accent"
+                className="w-full rounded-xl border border-line bg-surface py-2.5 pr-3 pl-9 text-base outline-none focus:border-accent md:text-sm"
               />
             </div>
           </div>

@@ -70,7 +70,7 @@ export function ResourceEditor({
             max={128}
             value={cores}
             onChange={(e) => setCores(Number(e.target.value))}
-            className="w-full rounded-xl border border-line bg-bg px-3 py-2 font-mono text-sm outline-none focus:border-accent"
+            className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 font-mono text-base outline-none focus:border-accent md:text-sm"
           />
         </label>
         <label>
@@ -82,7 +82,7 @@ export function ResourceEditor({
             step={16}
             value={memory}
             onChange={(e) => setMemory(Number(e.target.value))}
-            className="w-full rounded-xl border border-line bg-bg px-3 py-2 font-mono text-sm outline-none focus:border-accent"
+            className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 font-mono text-base outline-none focus:border-accent md:text-sm"
           />
         </label>
         {type === "lxc" ? (
@@ -95,7 +95,7 @@ export function ResourceEditor({
               step={16}
               value={swap}
               onChange={(e) => setSwap(Number(e.target.value))}
-              className="w-full rounded-xl border border-line bg-bg px-3 py-2 font-mono text-sm outline-none focus:border-accent"
+              className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 font-mono text-base outline-none focus:border-accent md:text-sm"
             />
           </label>
         ) : (
@@ -109,14 +109,14 @@ export function ResourceEditor({
             max={1024}
             value={growGiB}
             onChange={(e) => setGrowGiB(Number(e.target.value))}
-            className="w-full rounded-xl border border-line bg-bg px-3 py-2 font-mono text-sm outline-none focus:border-accent"
+            className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 font-mono text-base outline-none focus:border-accent md:text-sm"
           />
         </label>
         <div className="sm:col-span-2 lg:col-span-4">
           <button
             type="submit"
             disabled={save.isPending}
-            className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-black hover:bg-accent-2 disabled:opacity-40"
+            className="min-h-11 w-full rounded-xl bg-accent px-4 py-2.5 text-sm font-medium text-black hover:bg-accent-2 disabled:opacity-40 sm:min-h-0 sm:w-auto sm:py-2"
           >
             {save.isPending ? "Speichere…" : "Übernehmen"}
           </button>

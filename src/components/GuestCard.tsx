@@ -122,7 +122,7 @@ export function GuestCard({
         </span>
       </div>
 
-      <div className="mt-5 flex flex-wrap gap-2">
+      <div className="mt-5 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
         {running ? (
           <>
             <ActionBtn
@@ -203,7 +203,7 @@ function ActionBtn({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${primary ? "border-transparent" : ""} ${tone}`}
+      className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border px-3 py-2.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-0 sm:px-2.5 sm:py-1.5 ${primary ? "border-transparent" : ""} ${tone}`}
     >
       {icon}
       {label}

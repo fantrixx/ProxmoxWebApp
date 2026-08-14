@@ -26,16 +26,16 @@ export function ConfirmDialog({
   }, [busy, onCancel]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center sm:p-6">
       <div className="w-full max-w-md rounded-2xl border border-line bg-surface p-5 shadow-2xl">
         <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
         <p className="mt-2 text-sm leading-relaxed text-muted">{body}</p>
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button
             type="button"
             disabled={busy}
             onClick={onCancel}
-            className="rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-surface-2 disabled:opacity-40"
+            className="min-h-11 rounded-lg border border-line px-3 py-2 text-sm hover:bg-surface-2 disabled:opacity-40 sm:min-h-0 sm:py-1.5"
           >
             Abbrechen
           </button>
@@ -43,7 +43,7 @@ export function ConfirmDialog({
             type="button"
             disabled={busy}
             onClick={onConfirm}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-40 ${
+            className={`min-h-11 rounded-lg px-3 py-2 text-sm font-medium disabled:opacity-40 sm:min-h-0 sm:py-1.5 ${
               danger
                 ? "bg-bad text-black hover:opacity-90"
                 : "bg-accent text-black hover:bg-accent-2"
