@@ -1,13 +1,11 @@
 import { Link, useLocation } from "react-router-dom";
 import {
-  Box,
   Cpu,
   Disc3,
   HardDrive,
   HardDriveDownload,
   LayoutDashboard,
   ListTodo,
-  MonitorSmartphone,
 } from "lucide-react";
 import { AppVersionLabel } from "./AppVersion";
 import { useResources } from "../hooks";
@@ -16,17 +14,13 @@ import type { ClusterResource } from "../types";
 
 const desktopItems = [
   { to: "/", label: "Overview", icon: LayoutDashboard, exact: true },
-  { to: "/containers", label: "Containers", icon: Box },
-  { to: "/vms", label: "VMs", icon: MonitorSmartphone },
   { to: "/backups", label: "Backups", icon: HardDriveDownload },
+  { to: "/storage", label: "Storage", icon: HardDrive },
   { to: "/tasks", label: "Tasks", icon: ListTodo },
   { to: "/media", label: "Media", icon: Disc3 },
-  { to: "/storage", label: "Storage", icon: HardDrive },
 ];
 
-const mobileItems = desktopItems.filter(
-  (item) => item.to !== "/storage" && item.to !== "/media",
-);
+const mobileItems = desktopItems;
 
 function isActive(pathname: string, item: (typeof desktopItems)[number]) {
   return item.exact ? pathname === item.to : pathname.startsWith(item.to);

@@ -2,7 +2,7 @@
 
 **A focused web UI for Proxmox VE** — manage containers and VMs from any browser, including your phone.
 
-[![Version](https://img.shields.io/badge/version-1.3.21-orange?style=flat-square)](./package.json)
+[![Version](https://img.shields.io/badge/version-1.3.22-orange?style=flat-square)](./package.json)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square)](https://nodejs.org/)
 [![Proxmox](https://img.shields.io/badge/Proxmox%20VE-API-E57000?style=flat-square)](https://www.proxmox.com/)
 
@@ -97,7 +97,7 @@ The UI also checks GitHub for newer versions and shows an update banner on login
 
 ## Versioning
 
-App version comes from `package.json` (currently **1.3.21**). It appears on the login screen and in the signed-in UI. On load, ProxPanel compares against GitHub and can show an update banner.
+App version comes from `package.json` (currently **1.3.22**). It appears on the login screen and in the signed-in UI. On load, ProxPanel compares against GitHub and can show an update banner.
 
 ---
 

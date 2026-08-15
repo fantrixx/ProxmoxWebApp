@@ -27,6 +27,8 @@ export type ClusterResource = {
   storage?: string;
   plugintype?: string;
   shared?: number;
+  /** Allowed content types for storage resources, e.g. "images,rootdir,backup" */
+  content?: string;
 };
 
 export type ClusterStatusItem = {

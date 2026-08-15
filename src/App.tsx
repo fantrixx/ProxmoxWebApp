@@ -7,7 +7,6 @@ import Login from "./pages/Login";
 import AppShell from "./pages/AppShell";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
-const GuestList = lazy(() => import("./pages/GuestList"));
 const GuestDetail = lazy(() => import("./pages/GuestDetail"));
 const StoragePage = lazy(() => import("./pages/Storage"));
 const TasksPage = lazy(() => import("./pages/Tasks"));
@@ -58,8 +57,8 @@ export default function App() {
           <Route path="console/:type/:node/:vmid" element={<ConsolePage />} />
           <Route element={<AppShell />}>
             <Route index element={<Dashboard />} />
-            <Route path="containers" element={<GuestList kind="lxc" />} />
-            <Route path="vms" element={<GuestList kind="qemu" />} />
+            <Route path="containers" element={<Navigate to="/" replace />} />
+            <Route path="vms" element={<Navigate to="/" replace />} />
             <Route path="storage" element={<StoragePage />} />
             <Route path="tasks" element={<TasksPage />} />
             <Route path="backups" element={<BackupsPage />} />
