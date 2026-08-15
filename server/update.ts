@@ -150,16 +150,23 @@ if node -e "const fs=require('fs');try{const s=JSON.parse(fs.readFileSync(proces
   exit "$code"
 fi
 
+# Build a short error from the log tail so the UI shows a useful reason.
+log_hint="$(tail -n 20 "$LOG" 2>/dev/null | sed '/^$/d' | tail -n 8 | tr '\\n' ' ' | sed 's/[[:space:]]\\+/ /g' | cut -c1-280)"
+if [[ -z "$log_hint" ]]; then
+  log_hint="See $LOG"
+fi
+export UPDATE_LOG_HINT="$log_hint"
+
 if [[ "$code" -eq 0 ]]; then
   node -e "const fs=require('fs');fs.writeFileSync(process.argv[1], JSON.stringify({state:'success',startedAt:Number(process.argv[2]),finishedAt:Number(process.argv[3]),triggeredBy:process.argv[4],logPath:process.argv[5]})+'\\n')" \\
     "$STATUS" "$STARTED_AT" "$now" "$WHO" "$LOG"
 elif [[ "$code" -eq 2 ]]; then
-  node -e "const fs=require('fs');fs.writeFileSync(process.argv[1], JSON.stringify({state:'rolled_back',startedAt:Number(process.argv[2]),finishedAt:Number(process.argv[3]),triggeredBy:process.argv[4],rolledBack:true,error:process.argv[5],logPath:process.argv[6]})+'\\n')" \\
+  node -e "const fs=require('fs');const hint=process.env.UPDATE_LOG_HINT||'';fs.writeFileSync(process.argv[1], JSON.stringify({state:'rolled_back',startedAt:Number(process.argv[2]),finishedAt:Number(process.argv[3]),triggeredBy:process.argv[4],rolledBack:true,error:process.argv[5]+(hint?' '+hint:''),logPath:process.argv[6]})+'\\n')" \\
     "$STATUS" "$STARTED_AT" "$now" "$WHO" "Update failed; restored the previous working version." "$LOG"
   exit 2
 else
-  node -e "const fs=require('fs');fs.writeFileSync(process.argv[1], JSON.stringify({state:'failed',startedAt:Number(process.argv[2]),finishedAt:Number(process.argv[3]),triggeredBy:process.argv[4],error:process.argv[5],logPath:process.argv[6]})+'\\n')" \\
-    "$STATUS" "$STARTED_AT" "$now" "$WHO" "Update exited with code $code. See $LOG" "$LOG"
+  node -e "const fs=require('fs');const hint=process.env.UPDATE_LOG_HINT||'';fs.writeFileSync(process.argv[1], JSON.stringify({state:'failed',startedAt:Number(process.argv[2]),finishedAt:Number(process.argv[3]),triggeredBy:process.argv[4],error:process.argv[5]+(hint?' '+hint:''),logPath:process.argv[6]})+'\\n')" \\
+    "$STATUS" "$STARTED_AT" "$now" "$WHO" "Update exited with code $code." "$LOG"
   exit "$code"
 fi
 `;

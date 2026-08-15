@@ -42,7 +42,10 @@ msg_error() { echo -e "${TAB}${CROSS} ${RD}$1${CL}" >&2; }
 msg_warn() { echo -e "${TAB}${YW}!${CL} $1" >&2; }
 
 header_info() {
-  clear
+  # `clear` fails under systemd-run / no TTY and would abort with `set -e`.
+  if [[ -t 1 ]]; then
+    clear 2>/dev/null || true
+  fi
   cat <<'EOF'
 
   ██████╗ ██████╗  ██████╗ ██╗  ██╗██████╗  █████╗ ███╗   ██╗███████╗██╗
@@ -509,6 +512,10 @@ rollback_inside_ct() {
 }
 
 update_inside_ct() {
+  # Non-interactive updates (UI / systemd-run) must not abort on cosmetic commands.
+  set +e
+  trap - ERR
+
   header_info
   need_root
   if [[ ! -d "$APP_DIR" ]]; then
@@ -539,10 +546,6 @@ update_inside_ct() {
   if [[ -d dist ]]; then
     cp -a dist "$rollback_dir/dist-backup"
   fi
-
-  # Allow explicit handling / rollback instead of aborting via ERR trap.
-  set +e
-  trap - ERR
 
   msg_info "Fetching latest code from GitHub (${branch}) …"
   if [[ -d .git ]]; then
