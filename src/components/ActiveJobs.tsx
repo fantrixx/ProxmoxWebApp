@@ -25,7 +25,14 @@ function parseProgressFromLog(lines: { t?: string }[]): number | null {
 }
 
 function kindLabel(kind: ActiveJob["kind"], phase: "run" | "ok" | "fail"): string {
-  const base = kind === "backup" ? "Backup" : kind === "restore" ? "Restore" : "Task";
+  const base =
+    kind === "backup"
+      ? "Backup"
+      : kind === "restore"
+        ? "Restore"
+        : kind === "create"
+          ? "Create"
+          : "Task";
   if (phase === "run") return base;
   if (phase === "ok") return `${base} finished`;
   return `${base} failed`;
@@ -64,16 +71,30 @@ function useJobSnapshot(job: ActiveJob): JobSnapshot & { dismiss: () => void } {
 
   useEffect(() => {
     if (!pending || !recoverQ.data?.tasks?.length) return;
-    const hint = job.kind === "backup" ? "vzdump" : job.kind === "restore" ? "restore" : "";
-    const match = recoverQ.data.tasks.find((t) => {
-      if (!t.upid) return false;
-      if (job.vmid && String(t.id || "") !== String(job.vmid)) return false;
-      if (t.node && t.node !== job.node) return false;
-      const type = String(t.type || "").toLowerCase();
-      if (hint && !type.includes(hint) && type !== hint) return false;
-      const status = String(t.status || "").toLowerCase();
-      return status === "running" || !status;
-    });
+      const hint =
+        job.kind === "backup"
+          ? "vzdump"
+          : job.kind === "restore"
+            ? "restore"
+            : job.kind === "create"
+              ? ""
+              : "";
+      const match = recoverQ.data.tasks.find((t) => {
+        if (!t.upid) return false;
+        if (job.vmid && String(t.id || "") !== String(job.vmid)) return false;
+        if (t.node && t.node !== job.node) return false;
+        const type = String(t.type || "").toLowerCase();
+        if (hint && !type.includes(hint) && type !== hint) return false;
+        if (job.kind === "create") {
+          // qmcreate / vzcreate / create etc.
+          if (!/(create|clone)/i.test(type) && type !== "qmcreate" && type !== "vzcreate") {
+            // still allow empty type match by vmid+running
+            if (type && !type.includes("create")) return false;
+          }
+        }
+        const status = String(t.status || "").toLowerCase();
+        return status === "running" || !status;
+      });
     if (match?.upid) attachJobUpid(job.id, match.upid);
   }, [pending, recoverQ.data, job, attachJobUpid]);
 

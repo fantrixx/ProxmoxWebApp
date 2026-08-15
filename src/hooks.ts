@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { dataApi } from "./api";
 import type { ClusterResource, GuestRates } from "./types";
 import { useApp } from "./context";
+import { setPendingGuestAction } from "./pendingGuest";
 
 export function useGuestRates(resources: ClusterResource[] | undefined) {
   const [rates, setRates] = useState<Map<string, GuestRates>>(() => new Map());
@@ -71,13 +72,14 @@ export function useGuestAction() {
       action: string;
     }) => dataApi.action(node, type, vmid, action),
     onSuccess: (_data, vars) => {
+      setPendingGuestAction(vars.node, vars.type, vars.vmid, vars.action);
       const labels: Record<string, string> = {
-        start: "started",
-        stop: "stopped",
-        shutdown: "shut down",
-        reboot: "rebooted",
+        start: "start requested.",
+        stop: "force stop requested.",
+        shutdown: "shutdown requested.",
+        reboot: "reboot requested.",
       };
-      toast("ok", `Guest ${labels[vars.action] || vars.action}.`);
+      toast("ok", `Guest ${labels[vars.action] || vars.action}`);
       void qc.invalidateQueries({ queryKey: ["resources"] });
       void qc.invalidateQueries({ queryKey: ["guest"] });
     },

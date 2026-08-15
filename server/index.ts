@@ -243,6 +243,8 @@ type ResourceRow = {
   maxswap?: number;
   ips?: string[];
   template?: number;
+  lock?: string;
+  qmpstatus?: string;
 };
 
 const ipCache = new Map<string, { ips: string[]; at: number }>();
@@ -326,27 +328,39 @@ app.get("/api/resources", requireSession, async (req, res) => {
         const type = row.type === "qemu" ? "qemu" : "lxc";
         const running = row.status === "running";
         try {
+          const current = await pveRequest<{
+            disk?: number;
+            maxdisk?: number;
+            cpu?: number;
+            mem?: number;
+            maxmem?: number;
+            swap?: number;
+            maxswap?: number;
+            status?: string;
+            qmpstatus?: string;
+            lock?: string;
+          }>(
+            session,
+            "GET",
+            `/nodes/${encodeURIComponent(row.node!)}/${type}/${row.vmid}/status/current`,
+          );
+          if (current.status) row.status = current.status;
+          if (current.qmpstatus) row.qmpstatus = current.qmpstatus;
+          if (current.lock) row.lock = String(current.lock);
           if (running) {
-            const current = await pveRequest<{
-              disk?: number;
-              maxdisk?: number;
-              cpu?: number;
-              mem?: number;
-              maxmem?: number;
-              swap?: number;
-              maxswap?: number;
-            }>(
-              session,
-              "GET",
-              `/nodes/${encodeURIComponent(row.node!)}/${type}/${row.vmid}/status/current`,
-            );
             if (current.disk != null) row.disk = current.disk;
             if (current.maxdisk != null) row.maxdisk = current.maxdisk;
             if (current.cpu != null) row.cpu = current.cpu;
             if (current.mem != null) row.mem = current.mem;
             if (current.maxmem != null) row.maxmem = current.maxmem;
           }
-          row.ips = await resolveGuestIps(session, type, row.node!, row.vmid!, running);
+          row.ips = await resolveGuestIps(
+            session,
+            type,
+            row.node!,
+            row.vmid!,
+            row.status === "running",
+          );
         } catch {
           /* cluster/resources remains as fallback */
         }

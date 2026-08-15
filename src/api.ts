@@ -4,6 +4,7 @@ import type {
   BackupOverviewGuest,
   BackupStorage,
   GuestDetail,
+  GuestIconRecord,
   IsoUsageEntry,
   MediaItem,
   MediaStorage,
@@ -307,6 +308,30 @@ export const dataApi = {
       "/api/guests",
       { method: "POST", body: JSON.stringify(body) },
     ),
+  guestIcons: () => api<{ icons: Record<string, GuestIconRecord> }>("/api/guest-icons"),
+  setGuestIcon: (
+    node: string,
+    type: string,
+    vmid: string | number,
+    body: { mode: GuestIconRecord["mode"]; slug?: string; file?: string },
+  ) =>
+    api<{ icon: GuestIconRecord }>(
+      `/api/guest-icons/${encodeURIComponent(node)}/${encodeURIComponent(type)}/${encodeURIComponent(String(vmid))}`,
+      { method: "PUT", body: JSON.stringify(body) },
+    ),
+  deleteGuestIcon: (node: string, type: string, vmid: string | number) =>
+    api<{ ok: boolean }>(
+      `/api/guest-icons/${encodeURIComponent(node)}/${encodeURIComponent(type)}/${encodeURIComponent(String(vmid))}`,
+      { method: "DELETE" },
+    ),
+  uploadGuestIcon: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api<{ file: string; url: string }>("/api/guest-icons/upload", {
+      method: "POST",
+      body: fd,
+    });
+  },
   schedules: () => api<{ schedules: PowerSchedule[] }>("/api/schedules"),
   saveSchedule: (schedule: PowerSchedule) =>
     api<{ schedule: PowerSchedule }>("/api/schedules", {

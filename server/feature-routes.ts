@@ -1,9 +1,19 @@
 import type { Express, Request, Response, NextFunction } from "express";
+import { createReadStream } from "node:fs";
 import { openAsBlob } from "node:fs";
 import { unlink } from "node:fs/promises";
 import os from "node:os";
+import path from "node:path";
 import multer from "multer";
 import { pveFormUpload, pveRequest, unwrapUpid } from "./proxmox.ts";
+import {
+  deleteGuestIcon,
+  guestIconUploadPath,
+  listGuestIcons,
+  saveGuestIconUpload,
+  setGuestIcon,
+  type GuestIconMode,
+} from "./guest-icons.ts";
 import {
   deleteSchedule,
   isScheduleAction,
@@ -17,6 +27,11 @@ import type { Session } from "./session.ts";
 const mediaUpload = multer({
   dest: os.tmpdir(),
   limits: { fileSize: 64 * 1024 * 1024 * 1024 },
+});
+
+const iconUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024 },
 });
 
 type RouteHelpers = {
@@ -1362,6 +1377,117 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
         node,
         vmid,
       });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  app.get("/api/guest-icons", requireSession, async (_req, res) => {
+    try {
+      const icons = await listGuestIcons();
+      res.json({ icons });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  app.put("/api/guest-icons/:node/:type/:vmid", requireSession, async (req, res) => {
+    try {
+      const node = param(req.params.node);
+      const type = param(req.params.type);
+      const vmid = param(req.params.vmid);
+      if (type !== "lxc" && type !== "qemu") {
+        res.status(400).json({ error: "Invalid type." });
+        return;
+      }
+      const body = (req.body || {}) as {
+        mode?: GuestIconMode;
+        slug?: string;
+        file?: string;
+      };
+      const mode = body.mode;
+      if (mode !== "auto" && mode !== "cdn" && mode !== "upload" && mode !== "none") {
+        res.status(400).json({ error: "mode must be auto, cdn, upload, or none." });
+        return;
+      }
+      if (mode === "cdn" && !String(body.slug || "").trim()) {
+        res.status(400).json({ error: "slug is required for cdn mode." });
+        return;
+      }
+      if (mode === "upload" && !String(body.file || "").trim()) {
+        res.status(400).json({ error: "file is required for upload mode." });
+        return;
+      }
+      const icon = await setGuestIcon(node, type, vmid, {
+        mode,
+        slug: body.slug ? String(body.slug).trim() : undefined,
+        file: body.file ? path.basename(String(body.file)) : undefined,
+      });
+      res.json({ icon });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  app.delete("/api/guest-icons/:node/:type/:vmid", requireSession, async (req, res) => {
+    try {
+      const node = param(req.params.node);
+      const type = param(req.params.type);
+      const vmid = param(req.params.vmid);
+      await deleteGuestIcon(node, type, vmid);
+      res.json({ ok: true });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  app.post(
+    "/api/guest-icons/upload",
+    requireSession,
+    iconUpload.single("file"),
+    async (req, res) => {
+      try {
+        if (!req.file?.buffer) {
+          res.status(400).json({ error: "file is required." });
+          return;
+        }
+        const filename = await saveGuestIconUpload(
+          req.file.originalname || "icon.png",
+          req.file.buffer,
+        );
+        res.json({ file: filename, url: `/api/guest-icons/file/${encodeURIComponent(filename)}` });
+      } catch (err) {
+        sendError(res, err);
+      }
+    },
+  );
+
+  app.get("/api/guest-icons/file/:filename", requireSession, async (req, res) => {
+    try {
+      const filename = path.basename(param(req.params.filename));
+      const full = guestIconUploadPath(filename);
+      if (!full) {
+        res.status(400).json({ error: "Invalid filename." });
+        return;
+      }
+      const stream = createReadStream(full);
+      stream.on("error", () => {
+        if (!res.headersSent) res.status(404).json({ error: "File not found." });
+      });
+      const ext = path.extname(filename).toLowerCase();
+      const type =
+        ext === ".svg"
+          ? "image/svg+xml"
+          : ext === ".png"
+            ? "image/png"
+            : ext === ".webp"
+              ? "image/webp"
+              : ext === ".gif"
+                ? "image/gif"
+                : "image/jpeg";
+      res.setHeader("Content-Type", type);
+      res.setHeader("Cache-Control", "private, max-age=86400");
+      stream.pipe(res);
     } catch (err) {
       sendError(res, err);
     }

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Play,
@@ -15,6 +15,13 @@ import { MetricBar } from "../components/MetricBar";
 import { Sparkline } from "../components/Sparkline";
 import { StatusBadge } from "../components/StatusBadge";
 import { GuestTypeIcon } from "../components/GuestTypeIcon";
+import { ServiceIcon } from "../components/ServiceIcon";
+import {
+  GuestIconPicker,
+  iconDraftFromRecord,
+  persistIconDraft,
+  type IconDraft,
+} from "../components/GuestIconPicker";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { IpList } from "../components/IpList";
 import { SnapshotPanel } from "../components/SnapshotPanel";
@@ -32,6 +39,8 @@ import {
   guestLabel,
   usagePct,
 } from "../format";
+import { reconcilePendingGuestAction } from "../pendingGuest";
+import { guestIconKey } from "../guestIconKey";
 import type { GuestType } from "../types";
 
 type PowerKind = keyof typeof POWER_CONFIRMS;
@@ -40,8 +49,11 @@ export default function GuestDetail() {
   const { type, node, vmid } = useParams();
   const navigate = useNavigate();
   const { openConsole, toast } = useApp();
+  const qc = useQueryClient();
   const action = useGuestAction();
   const [confirm, setConfirm] = useState<PowerKind | null>(null);
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const [iconDraft, setIconDraft] = useState<IconDraft>({ mode: "auto" });
 
   const q = useQuery({
     queryKey: ["guest", node, type, vmid],
@@ -50,13 +62,53 @@ export default function GuestDetail() {
     refetchInterval: 3000,
   });
 
-  if (!type || !node || !vmid) return null;
+  const iconsQ = useQuery({
+    queryKey: ["guestIcons"],
+    queryFn: () => dataApi.guestIcons(),
+    enabled: Boolean(node && type && vmid),
+  });
 
   const guestType = (type === "qemu" ? "qemu" : "lxc") as GuestType;
+  const iconKey =
+    node && type && vmid ? guestIconKey(node, guestType, vmid) : null;
+  const storedIcon = iconKey ? iconsQ.data?.icons?.[iconKey] || null : null;
+
+  const saveIcon = useMutation({
+    mutationFn: async (draft: IconDraft) => {
+      if (!node || !vmid) throw new Error("Missing guest.");
+      const body = await persistIconDraft(
+        draft,
+        String(q.data?.status?.name || q.data?.config?.name || ""),
+        (file) => dataApi.uploadGuestIcon(file),
+      );
+      if (!body || body === "clear") {
+        await dataApi.deleteGuestIcon(node, guestType, vmid);
+        return;
+      }
+      await dataApi.setGuestIcon(node, guestType, vmid, body);
+    },
+    onSuccess: () => {
+      toast("ok", "Logo updated.");
+      void qc.invalidateQueries({ queryKey: ["guestIcons"] });
+      setIconPickerOpen(false);
+    },
+    onError: (err: Error) => toast("err", err.message),
+  });
+
+  if (!type || !node || !vmid) return null;
+
   const status = q.data?.status;
   const config = q.data?.config || {};
-  const running = status?.status === "running";
+  const pending = reconcilePendingGuestAction(
+    node,
+    guestType,
+    vmid,
+    status?.status,
+    status?.qmpstatus,
+  );
+  const running = status?.status === "running" && pending !== "shutting down" && pending !== "stopping";
   const name = String(status?.name || config.name || `Guest ${vmid}`);
+  const tags = typeof config.tags === "string" ? config.tags : undefined;
 
   function run(kind: string) {
     action.mutate(
@@ -100,38 +152,59 @@ export default function GuestDetail() {
           <p className="text-sm text-bad">{(q.error as Error).message}</p>
         ) : null}
 
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <StatusBadge status={status?.status} />
-            <span className="inline-flex items-center gap-1.5 text-sm text-muted">
-              <GuestTypeIcon type={guestType} className="size-3.5" />
-              {guestLabel(guestType)} {vmid}
-            </span>
-            <span className="text-sm text-muted">{formatUptime(status?.uptime)}</span>
-            <IpList ips={q.data?.ips} />
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-            {running ? (
-              <>
-                <Btn onClick={() => setConfirm("shutdown")} disabled={action.isPending}>
-                  <Power className="size-3.5" /> Shut down
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-1 flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <StatusBadge
+                status={status?.status}
+                qmpstatus={status?.qmpstatus}
+                lock={status?.lock}
+                pending={pending}
+              />
+              <span className="inline-flex items-center gap-1.5 text-sm text-muted">
+                <GuestTypeIcon type={guestType} className="size-3.5" />
+                {guestLabel(guestType)} {vmid}
+              </span>
+              <span className="text-sm text-muted">{formatUptime(status?.uptime)}</span>
+              <IpList ips={q.data?.ips} />
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+              {running ? (
+                <>
+                  <Btn onClick={() => setConfirm("shutdown")} disabled={action.isPending}>
+                    <Power className="size-3.5" /> Shut down
+                  </Btn>
+                  <Btn danger onClick={() => setConfirm("stop")} disabled={action.isPending}>
+                    <Square className="size-3.5" /> Stop
+                  </Btn>
+                  <Btn onClick={() => setConfirm("reboot")} disabled={action.isPending}>
+                    <RotateCcw className="size-3.5" /> Restart
+                  </Btn>
+                </>
+              ) : (
+                <Btn primary onClick={() => run("start")} disabled={action.isPending}>
+                  <Play className="size-3.5" /> Start
                 </Btn>
-                <Btn danger onClick={() => setConfirm("stop")} disabled={action.isPending}>
-                  <Square className="size-3.5" /> Stop
-                </Btn>
-                <Btn onClick={() => setConfirm("reboot")} disabled={action.isPending}>
-                  <RotateCcw className="size-3.5" /> Restart
-                </Btn>
-              </>
-            ) : (
-              <Btn primary onClick={() => run("start")} disabled={action.isPending}>
-                <Play className="size-3.5" /> Start
+              )}
+              <Btn onClick={shell} disabled={!running}>
+                <TerminalSquare className="size-3.5" /> Shell
               </Btn>
-            )}
-            <Btn onClick={shell} disabled={!running}>
-              <TerminalSquare className="size-3.5" /> Shell
-            </Btn>
+            </div>
           </div>
+          <ServiceIcon
+            name={name}
+            tags={tags}
+            node={node}
+            type={guestType}
+            vmid={vmid}
+            record={storedIcon}
+            className="size-14"
+            editable
+            onEdit={() => {
+              setIconDraft(iconDraftFromRecord(storedIcon));
+              setIconPickerOpen(true);
+            }}
+          />
         </div>
 
         <section className="grid min-w-0 gap-4 md:grid-cols-3">
@@ -203,6 +276,20 @@ export default function GuestDetail() {
           onConfirm={() => run(confirm)}
         />
       ) : null}
+
+      <GuestIconPicker
+        open={iconPickerOpen}
+        name={name}
+        tags={tags}
+        value={iconDraft}
+        onChange={setIconDraft}
+        onClose={() => setIconPickerOpen(false)}
+        title="Guest logo"
+        doneLabel="Save logo"
+        onPersist={async (draft) => {
+          await saveIcon.mutateAsync(draft);
+        }}
+      />
     </div>
   );
 }

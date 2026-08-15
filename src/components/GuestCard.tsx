@@ -20,12 +20,14 @@ import {
   formatSnapTime,
   formatUptime,
   guestLabel,
+  guestVisualStatus,
   usagePct,
 } from "../format";
 import { dataApi } from "../api";
 import { MetricBar } from "./MetricBar";
 import { StatusBadge } from "./StatusBadge";
 import { GuestTypeIcon } from "./GuestTypeIcon";
+import { ServiceIcon } from "./ServiceIcon";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { BackupDialog } from "./BackupDialog";
 import { ScheduleDialog } from "./ScheduleDialog";
@@ -34,6 +36,7 @@ import { useApp } from "../context";
 import { useGuestAction } from "../hooks";
 import { useGuestBackupProgress } from "../hooks/useGuestBackupProgress";
 import { POWER_CONFIRMS } from "../power";
+import { reconcilePendingGuestAction } from "../pendingGuest";
 
 type PowerKind = keyof typeof POWER_CONFIRMS;
 
@@ -49,9 +52,29 @@ export function GuestCard({
   const [confirm, setConfirm] = useState<PowerKind | null>(null);
   const [backupOpen, setBackupOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
-  const running = guest.status === "running";
   const type = (guest.type === "qemu" ? "qemu" : "lxc") as GuestType;
-  const busy = action.isPending;
+  const pending = reconcilePendingGuestAction(
+    guest.node,
+    type,
+    guest.vmid,
+    guest.status,
+    guest.qmpstatus,
+  );
+  const visual = guestVisualStatus({
+    status: guest.status,
+    qmpstatus: guest.qmpstatus,
+    lock: guest.lock,
+    pending,
+  });
+  const running = visual === "running";
+  const transitioning =
+    visual === "shutting down" ||
+    visual === "stopping" ||
+    visual === "starting" ||
+    visual === "rebooting" ||
+    visual === "creating" ||
+    visual === "migrating";
+  const busy = action.isPending || transitioning;
   const backup = useGuestBackupProgress(guest.node, guest.vmid);
 
   function run(kind: string) {
@@ -87,7 +110,13 @@ export function GuestCard({
           ? "border-bad/50"
           : backingUp
             ? "border-accent/50"
-            : "border-line"
+            : visual === "creating" || visual === "starting"
+              ? "border-accent/40"
+              : visual === "shutting down" ||
+                  visual === "stopping" ||
+                  visual === "rebooting"
+                ? "border-warn/40"
+                : "border-line"
       }`}
     >
       {backingUp || backupFailed ? (
@@ -107,16 +136,43 @@ export function GuestCard({
             />
           ) : null}
         </div>
+      ) : transitioning ? (
+        <div
+          className={`absolute inset-x-0 top-0 h-1 ${
+            visual === "creating" || visual === "starting" || visual === "migrating"
+              ? "bg-accent/40 animate-pulse"
+              : "bg-warn/40 animate-pulse"
+          }`}
+        />
       ) : null}
 
       <div className="mb-4 flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="mb-1.5 flex flex-wrap items-center gap-2">
-            <StatusBadge status={guest.status} />
+            <StatusBadge
+              status={guest.status}
+              qmpstatus={guest.qmpstatus}
+              lock={guest.lock}
+              pending={pending}
+            />
             <span className="inline-flex items-center gap-1 rounded-md bg-bg px-1.5 py-0.5 font-mono text-[11px] text-muted">
               <GuestTypeIcon type={type} className="size-3" />
               {guestLabel(type)} {guest.vmid}
             </span>
+            {transitioning && !backingUp ? (
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${
+                  visual === "creating" ||
+                  visual === "starting" ||
+                  visual === "migrating"
+                    ? "border-accent/40 bg-accent/10 text-accent"
+                    : "border-warn/40 bg-warn/10 text-warn"
+                }`}
+              >
+                <Loader2 className="size-3 animate-spin" aria-hidden />
+                {visual === "creating" ? "Setting up…" : visual}
+              </span>
+            ) : null}
             {backingUp ? (
               <span className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[11px] font-medium text-accent">
                 <Loader2 className="size-3 animate-spin" aria-hidden />
@@ -133,7 +189,6 @@ export function GuestCard({
             to={`/guest/${type}/${guest.node}/${guest.vmid}`}
             className="flex min-w-0 items-center gap-2 text-lg font-semibold tracking-tight hover:text-accent"
           >
-            <GuestTypeIcon type={type} className="size-4 shrink-0 text-muted" />
             <span className="truncate">{guest.name || `Guest ${guest.vmid}`}</span>
           </Link>
           <p className="mt-1 text-xs text-muted">
@@ -145,6 +200,14 @@ export function GuestCard({
             <IpList ips={guest.ips} />
           </div>
         </div>
+        <ServiceIcon
+          name={guest.name}
+          tags={guest.tags}
+          node={guest.node}
+          type={type}
+          vmid={guest.vmid}
+          className="size-12"
+        />
       </div>
 
       {backingUp ? (

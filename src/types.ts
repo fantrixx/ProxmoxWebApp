@@ -1,5 +1,14 @@
 export type GuestType = "lxc" | "qemu";
 
+export type GuestIconMode = "auto" | "cdn" | "upload" | "none";
+
+export type GuestIconRecord = {
+  mode: GuestIconMode;
+  slug?: string;
+  file?: string;
+  updatedAt: number;
+};
+
 export type ResourceType = GuestType | "node" | "storage" | "sdn" | string;
 
 export type ClusterResource = {
@@ -29,6 +38,10 @@ export type ClusterResource = {
   shared?: number;
   /** Allowed content types for storage resources, e.g. "images,rootdir,backup" */
   content?: string;
+  /** Proxmox lock (create, migrate, backup, …) while a task holds the guest */
+  lock?: string;
+  /** QEMU machine status (running, shutdown, paused, …) */
+  qmpstatus?: string;
 };
 
 export type ClusterStatusItem = {
@@ -69,6 +82,7 @@ export type GuestStatus = {
   ha?: { managed?: number };
   pid?: number;
   qmpstatus?: string;
+  lock?: string;
 };
 
 export type RrdPoint = {

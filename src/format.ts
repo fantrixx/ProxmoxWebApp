@@ -66,18 +66,58 @@ export function formatSnapTime(epoch?: number): string {
 }
 
 export function statusLabel(status?: string): string {
-  switch (status) {
+  switch ((status || "").toLowerCase()) {
     case "running":
       return "running";
     case "stopped":
       return "stopped";
     case "paused":
       return "paused";
+    case "suspended":
+      return "suspended";
     case "online":
       return "online";
     case "offline":
       return "offline";
+    case "shutting down":
+      return "shutting down";
+    case "stopping":
+      return "stopping";
+    case "starting":
+      return "starting";
+    case "rebooting":
+      return "rebooting";
+    case "creating":
+      return "creating";
+    case "migrating":
+      return "migrating";
     default:
       return status || "unknown";
   }
+}
+
+/** Resolve the status shown on cards / badges from Proxmox + local pending actions. */
+export function guestVisualStatus(opts: {
+  status?: string;
+  qmpstatus?: string;
+  lock?: string;
+  pending?: string;
+}): string {
+  const lock = (opts.lock || "").toLowerCase();
+  if (lock.includes("creat") || lock === "clone") return "creating";
+  if (lock.includes("migrat")) return "migrating";
+  if (lock === "suspended" || lock.includes("suspend")) return "suspended";
+
+  const qmp = (opts.qmpstatus || "").toLowerCase();
+  if (qmp === "shutdown") return "shutting down";
+  if (qmp === "prelaunch") return "starting";
+  if (qmp === "paused") return "paused";
+  if (qmp === "suspended") return "suspended";
+
+  const pending = (opts.pending || "").toLowerCase();
+  if (pending) return pending;
+
+  const status = (opts.status || "").toLowerCase();
+  if (status) return status;
+  return "unknown";
 }

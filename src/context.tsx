@@ -18,7 +18,7 @@ export type Toast = {
 
 export type ActiveJob = {
   id: string;
-  kind: "backup" | "restore" | "task";
+  kind: "backup" | "restore" | "create" | "task";
   title: string;
   detail: string;
   node: string;

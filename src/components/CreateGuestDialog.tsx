@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Box, Cpu, HardDrive, Network, Server, X } from "lucide-react";
+import { Box, Cpu, HardDrive, ImagePlus, Network, Server, X } from "lucide-react";
 import { dataApi } from "../api";
 import { useApp } from "../context";
 import type { GuestType } from "../types";
+import {
+  GuestIconPicker,
+  LogoPreview,
+  persistIconDraft,
+  resolveIconSrc,
+  type IconDraft,
+} from "./GuestIconPicker";
 
 function volname(volid: string): string {
   const idx = volid.indexOf(":");
@@ -66,7 +73,7 @@ export function CreateGuestDialog({
   initialType: GuestType;
   onClose: () => void;
 }) {
-  const { toast } = useApp();
+  const { toast, trackJob } = useApp();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [type, setType] = useState<GuestType>(initialType);
@@ -78,6 +85,8 @@ export function CreateGuestDialog({
     bridge: "",
   }));
   const [showPassword, setShowPassword] = useState(false);
+  const [iconDraft, setIconDraft] = useState<IconDraft>({ mode: "auto" });
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
 
   const resources = useQuery({
     queryKey: ["resources"],
@@ -149,6 +158,8 @@ export function CreateGuestDialog({
       bridge: "",
     });
     setShowPassword(false);
+    setIconDraft({ mode: "auto" });
+    setIconPickerOpen(false);
   }, [open, initialType]);
 
   useEffect(() => {
@@ -225,8 +236,16 @@ export function CreateGuestDialog({
       if (!form.node) throw new Error("Select a node.");
       if (!form.name.trim()) throw new Error("Name is required.");
 
+      let created: {
+        ok: boolean;
+        upid?: string;
+        type: "lxc" | "qemu";
+        node: string;
+        vmid: number;
+      };
+
       if (type === "lxc") {
-        return dataApi.createGuest({
+        created = await dataApi.createGuest({
           type: "lxc",
           node: form.node,
           vmid,
@@ -242,31 +261,63 @@ export function CreateGuestDialog({
           unprivileged: form.unprivileged,
           start: form.start,
         });
+      } else {
+        created = await dataApi.createGuest({
+          type: "qemu",
+          node: form.node,
+          vmid,
+          name: form.name.trim(),
+          cores,
+          memory,
+          diskGiB,
+          storage: parsed.storage,
+          bridge: form.bridge || "vmbr0",
+          iso: form.iso || null,
+          start: form.start,
+        });
       }
 
-      return dataApi.createGuest({
-        type: "qemu",
-        node: form.node,
-        vmid,
-        name: form.name.trim(),
-        cores,
-        memory,
-        diskGiB,
-        storage: parsed.storage,
-        bridge: form.bridge || "vmbr0",
-        iso: form.iso || null,
-        start: form.start,
-      });
+      try {
+        const iconBody = await persistIconDraft(
+          iconDraft,
+          form.name.trim(),
+          (file) => dataApi.uploadGuestIcon(file),
+        );
+        if (iconBody && iconBody !== "clear") {
+          await dataApi.setGuestIcon(created.node, created.type, created.vmid, iconBody);
+        }
+      } catch {
+        /* guest created — icon is optional */
+      }
+
+      return created;
     },
     onSuccess: (data) => {
-      toast("ok", type === "lxc" ? "Container created." : "VM created.");
+      const label = form.name.trim() || `Guest ${data.vmid}`;
+      trackJob({
+        kind: "create",
+        title: `Create · ${label}`,
+        detail: `${data.type === "lxc" ? "CT" : "VM"} ${data.vmid} on ${data.node}`,
+        node: data.node,
+        upid: data.upid || "",
+        vmid: String(data.vmid),
+      });
+      toast(
+        "ok",
+        data.type === "lxc"
+          ? "Container create started — Proxmox is setting it up."
+          : "VM create started — Proxmox is setting it up.",
+      );
       void qc.invalidateQueries({ queryKey: ["resources"] });
       void qc.invalidateQueries({ queryKey: ["clusterNextId"] });
+      void qc.invalidateQueries({ queryKey: ["guestIcons"] });
       onClose();
       navigate(`/guest/${data.type}/${encodeURIComponent(data.node)}/${data.vmid}`);
     },
     onError: (err: Error) => toast("err", err.message),
   });
+
+  const iconPreview = resolveIconSrc(iconDraft, form.name);
 
   if (!open) return null;
 
@@ -287,12 +338,12 @@ export function CreateGuestDialog({
     setForm((f) => ({
       ...f,
       ...defaultsFor(next),
-      // keep node / vmid / bridge / storage when possible
       storageKey: "",
       ostemplate: "",
       iso: "",
       password: "",
     }));
+    setIconDraft({ mode: "auto" });
   }
 
   return (
@@ -367,13 +418,34 @@ export function CreateGuestDialog({
                     value={form.name}
                     disabled={busy}
                     onChange={(e) => patch("name", e.target.value)}
-                    placeholder={type === "lxc" ? "web-01" : "ubuntu-desktop"}
+                    placeholder={type === "lxc" ? "nextcloud" : "ubuntu-desktop"}
                     className={inputClass}
                     required
                     autoFocus
                   />
                 </Field>
               </div>
+            </Section>
+
+            <Section icon={<ImagePlus className="size-3.5" />} title="Logo">
+              <div className="flex items-center gap-3 rounded-xl border border-line bg-bg/50 p-3">
+                <LogoPreview src={iconPreview.src} className="size-14" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{iconPreview.label}</p>
+                  <p className="text-xs text-muted">{iconPreview.hint}</p>
+                </div>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setIconPickerOpen(true)}
+                  className="shrink-0 rounded-xl border border-line px-3 py-2 text-sm hover:bg-surface-2"
+                >
+                  Change
+                </button>
+              </div>
+              <Hint>
+                Logos update as you type the name. You can lock a catalog icon or upload your own.
+              </Hint>
             </Section>
 
             <Section
@@ -612,6 +684,16 @@ export function CreateGuestDialog({
           </div>
         </form>
       </div>
+
+      <GuestIconPicker
+        open={iconPickerOpen}
+        name={form.name}
+        value={iconDraft}
+        onChange={setIconDraft}
+        onClose={() => setIconPickerOpen(false)}
+        title="Choose a logo"
+        doneLabel="Use this logo"
+      />
     </div>
   );
 }
