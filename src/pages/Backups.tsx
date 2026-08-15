@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDownUp, HardDriveDownload, Search, X } from "lucide-react";
+import { ArrowDownUp, CalendarClock, HardDriveDownload, Search, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { dataApi } from "../api";
 import { Header } from "../components/Header";
@@ -57,6 +57,9 @@ export default function BackupsPage() {
   }, [q.data, kind, qtext, sortDir]);
 
   const withBackup = (q.data?.guests || []).filter((g) => g.lastBackup).length;
+  const withSchedule = (q.data?.guests || []).filter(
+    (g) => g.enabledBackupScheduleCount > 0,
+  ).length;
 
   return (
     <div className="max-w-full overflow-x-hidden">
@@ -65,7 +68,7 @@ export default function BackupsPage() {
         subtitle={
           q.isLoading
             ? "Loading backup overview…"
-            : `${withBackup} of ${(q.data?.guests || []).length} guests have a backup`
+            : `${withBackup} of ${(q.data?.guests || []).length} guests have a backup · ${withSchedule} scheduled`
         }
       />
 
@@ -110,10 +113,11 @@ export default function BackupsPage() {
           <p className="text-sm text-muted">No guests match these filters.</p>
         ) : (
           <>
-            <div className="mb-2 hidden text-[11px] text-muted md:grid md:grid-cols-[minmax(0,1.4fr)_5.5rem_7.5rem_5rem_6.5rem_minmax(0,1fr)] md:gap-3 md:px-3">
+            <div className="mb-2 hidden text-[11px] text-muted md:grid md:grid-cols-[minmax(0,1.3fr)_4.5rem_7rem_minmax(0,1fr)_4.5rem_5.5rem_minmax(0,0.9fr)] md:gap-3 md:px-3">
               <span>Guest</span>
               <span>Type</span>
               <span>Last backup</span>
+              <span>Schedule</span>
               <span>Format</span>
               <span>Size</span>
               <span>Location</span>
@@ -124,7 +128,7 @@ export default function BackupsPage() {
                   <button
                     type="button"
                     onClick={() => setSelected(row)}
-                    className="grid w-full min-w-0 cursor-pointer gap-2 overflow-hidden px-3 py-3 text-left transition hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40 md:grid-cols-[minmax(0,1.4fr)_5.5rem_7.5rem_5rem_6.5rem_minmax(0,1fr)] md:items-center md:gap-3"
+                    className="grid w-full min-w-0 cursor-pointer gap-2 overflow-hidden px-3 py-3 text-left transition hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40 md:grid-cols-[minmax(0,1.3fr)_4.5rem_7rem_minmax(0,1fr)_4.5rem_5.5rem_minmax(0,0.9fr)] md:items-center md:gap-3"
                   >
                     <div className="min-w-0 overflow-hidden">
                       <div className="flex min-w-0 items-center gap-2">
@@ -148,6 +152,10 @@ export default function BackupsPage() {
                             ? formatSnapTime(row.lastBackup.ctime)
                             : "Never"}
                         </span>
+                      </div>
+                      <div className="flex min-w-0 items-start justify-between gap-3">
+                        <span>Schedule</span>
+                        <ScheduleBadge guest={row} align="end" />
                       </div>
                       <div className="flex min-w-0 justify-between gap-3">
                         <span>Format / size</span>
@@ -174,6 +182,9 @@ export default function BackupsPage() {
                       {row.lastBackup?.ctime
                         ? formatSnapTime(row.lastBackup.ctime)
                         : "Never"}
+                    </div>
+                    <div className="hidden min-w-0 md:block">
+                      <ScheduleBadge guest={row} />
                     </div>
                     <div className="hidden min-w-0 truncate font-mono text-ink/80 md:block md:text-xs">
                       {formatLabel(row.lastBackup)}
@@ -232,6 +243,42 @@ function KindChip({
   );
 }
 
+function ScheduleBadge({
+  guest,
+  align = "start",
+}: {
+  guest: BackupOverviewGuest;
+  align?: "start" | "end";
+}) {
+  if (!guest.hasBackupSchedule) {
+    return (
+      <span
+        className={`inline-flex items-center gap-1 rounded-md bg-white/5 px-1.5 py-0.5 text-[11px] text-muted ${
+          align === "end" ? "text-right" : ""
+        }`}
+      >
+        No schedule
+      </span>
+    );
+  }
+
+  const active = guest.enabledBackupScheduleCount > 0;
+  return (
+    <span
+      className={`inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium ${
+        active ? "bg-accent/15 text-accent" : "bg-warn/15 text-warn"
+      } ${align === "end" ? "justify-end text-right" : ""}`}
+      title={guest.backupScheduleSummary || undefined}
+    >
+      <CalendarClock className="size-3 shrink-0" aria-hidden />
+      <span className="min-w-0 truncate">
+        {active ? "Scheduled" : "Paused"}
+        {guest.backupScheduleSummary ? ` · ${guest.backupScheduleSummary}` : ""}
+      </span>
+    </span>
+  );
+}
+
 function BackupOverviewDialog({
   guest,
   onClose,
@@ -286,6 +333,18 @@ function BackupOverviewDialog({
         </div>
 
         <div className="min-h-0 min-w-0 flex-1 space-y-5 overflow-x-hidden overflow-y-auto overscroll-contain px-5 py-4">
+          <div className="rounded-xl border border-line bg-bg/40 px-3 py-3">
+            <p className="text-[11px] text-muted">Backup schedule</p>
+            <div className="mt-1.5">
+              <ScheduleBadge guest={guest} />
+            </div>
+            {!guest.hasBackupSchedule ? (
+              <p className="mt-1.5 text-xs text-muted">
+                Create one on the guest page under Power schedules (action: Backup).
+              </p>
+            ) : null}
+          </div>
+
           {!backup ? (
             <div className="rounded-xl border border-dashed border-line bg-bg/40 px-4 py-8 text-center">
               <HardDriveDownload className="mx-auto size-8 text-muted" />

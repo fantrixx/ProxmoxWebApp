@@ -666,9 +666,10 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
         template?: number;
       };
 
-      const [resources, backups] = await Promise.all([
+      const [resources, backups, schedules] = await Promise.all([
         pveRequest<ResourceRow[]>(session, "GET", "/cluster/resources"),
         listAllBackupItems(session),
+        listSchedules(),
       ]);
 
       const byVmid = new Map<number, (ContentRow & { node: string; storage: string })[]>();
@@ -678,6 +679,33 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
         const list = byVmid.get(vmid) || [];
         list.push({ ...row, vmid });
         byVmid.set(vmid, list);
+      }
+
+      const backupSchedulesByGuest = new Map<string, PowerSchedule[]>();
+      for (const schedule of schedules) {
+        if (schedule.action !== "backup") continue;
+        const key = `${schedule.node}:${schedule.type}:${schedule.vmid}`;
+        const list = backupSchedulesByGuest.get(key) || [];
+        list.push(schedule);
+        backupSchedulesByGuest.set(key, list);
+      }
+
+      const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+      function scheduleSummary(list: PowerSchedule[]): string | null {
+        if (!list.length) return null;
+        const preferred =
+          list.find((s) => s.enabled) ||
+          [...list].sort((a, b) => a.time.localeCompare(b.time))[0];
+        if (!preferred) return null;
+        const days =
+          preferred.days.length === 0
+            ? "every day"
+            : preferred.days.map((d) => dayLabels[d] ?? String(d)).join(", ");
+        const paused = preferred.enabled ? "" : " (paused)";
+        const extra =
+          list.length > 1 ? ` · +${list.length - 1} more` : "";
+        return `${preferred.time} ${days}${paused}${extra}`;
       }
 
       const guests = (resources || [])
@@ -690,13 +718,18 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
         )
         .map((r) => {
           const vmid = Number(r.vmid);
+          const type = r.type as "lxc" | "qemu";
+          const node = r.node!;
           const list = [...(byVmid.get(vmid) || [])].sort(
             (a, b) => (b.ctime || 0) - (a.ctime || 0),
           );
           const last = list[0];
+          const guestSchedules =
+            backupSchedulesByGuest.get(`${node}:${type}:${vmid}`) || [];
+          const enabledCount = guestSchedules.filter((s) => s.enabled).length;
           return {
-            node: r.node!,
-            type: r.type as "lxc" | "qemu",
+            node,
+            type,
             vmid,
             name: r.name || String(vmid),
             status: r.status,
@@ -713,6 +746,10 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
                   vmid: last.vmid,
                 }
               : null,
+            hasBackupSchedule: guestSchedules.length > 0,
+            backupScheduleCount: guestSchedules.length,
+            enabledBackupScheduleCount: enabledCount,
+            backupScheduleSummary: scheduleSummary(guestSchedules),
           };
         });
 

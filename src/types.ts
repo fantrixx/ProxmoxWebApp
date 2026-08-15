@@ -142,6 +142,14 @@ export type BackupOverviewGuest = {
   status?: string;
   backupCount: number;
   lastBackup: MediaItem | null;
+  /** Total backup schedules for this guest (enabled or paused) */
+  backupScheduleCount: number;
+  /** Enabled backup schedules only */
+  enabledBackupScheduleCount: number;
+  /** True if at least one backup schedule exists (enabled or not) */
+  hasBackupSchedule: boolean;
+  /** Short summary of the next/primary backup schedule, e.g. "08:00 every day" */
+  backupScheduleSummary?: string | null;
 };
 
 export type ScheduleAction = "start" | "shutdown" | "stop" | "backup";
