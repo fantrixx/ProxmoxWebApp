@@ -3,7 +3,9 @@ import type {
   BackupOverviewGuest,
   BackupStorage,
   GuestDetail,
+  IsoUsageEntry,
   MediaItem,
+  MediaStorage,
   PowerSchedule,
   PveTask,
   ResourcesResponse,
@@ -60,7 +62,7 @@ async function parseError(res: Response): Promise<string> {
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
-  if (init?.body && !headers.has("Content-Type")) {
+  if (init?.body && !headers.has("Content-Type") && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
   const res = await fetch(path, {
@@ -169,6 +171,48 @@ export const dataApi = {
     ),
   mediaIsos: () => api<{ items: MediaItem[] }>("/api/media/isos"),
   mediaTemplates: () => api<{ items: MediaItem[] }>("/api/media/templates"),
+  mediaStorages: (content: "iso" | "vztmpl") =>
+    api<{ storages: MediaStorage[] }>(
+      `/api/media/storages?content=${encodeURIComponent(content)}`,
+    ),
+  mediaIsoUsage: () =>
+    api<{ usage: Record<string, IsoUsageEntry[]> }>("/api/media/iso-usage"),
+  mediaDelete: (body: { node: string; storage: string; volume: string }) =>
+    api<{ ok: boolean }>("/api/media", {
+      method: "DELETE",
+      body: JSON.stringify(body),
+    }),
+  mediaUpload: (body: {
+    node: string;
+    storage: string;
+    content: "iso" | "vztmpl";
+    file: File;
+    filename?: string;
+  }) => {
+    const fd = new FormData();
+    fd.append("node", body.node);
+    fd.append("storage", body.storage);
+    fd.append("content", body.content);
+    fd.append("filename", body.filename || body.file.name);
+    fd.append("file", body.file, body.filename || body.file.name);
+    return api<{ ok: boolean; upid?: string }>("/api/media/upload", {
+      method: "POST",
+      body: fd,
+    });
+  },
+  mediaDownloadUrl: (body: {
+    node: string;
+    storage: string;
+    url: string;
+    filename: string;
+    content: "iso" | "vztmpl";
+    checksum?: string;
+    checksumAlgorithm?: string;
+  }) =>
+    api<{ ok: boolean; upid?: string }>("/api/media/download-url", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   backupStorages: () => api<{ storages: BackupStorage[] }>("/api/media/backup-storages"),
   backupsOverview: () => api<{ guests: BackupOverviewGuest[] }>("/api/backups/overview"),
   storageContent: (node: string, storage: string, content?: string) =>

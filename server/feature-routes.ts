@@ -1,5 +1,9 @@
 import type { Express, Request, Response, NextFunction } from "express";
-import { pveRequest, unwrapUpid } from "./proxmox.ts";
+import { openAsBlob } from "node:fs";
+import { unlink } from "node:fs/promises";
+import os from "node:os";
+import multer from "multer";
+import { pveFormUpload, pveRequest, unwrapUpid } from "./proxmox.ts";
 import {
   deleteSchedule,
   isScheduleAction,
@@ -9,6 +13,11 @@ import {
   type PowerSchedule,
 } from "./schedules.ts";
 import type { Session } from "./session.ts";
+
+const mediaUpload = multer({
+  dest: os.tmpdir(),
+  limits: { fileSize: 64 * 1024 * 1024 * 1024 },
+});
 
 type RouteHelpers = {
   requireSession: (req: Request, res: Response, next: NextFunction) => void;
@@ -236,6 +245,93 @@ function findCdromDrive(config: Record<string, unknown>): string | null {
     if (str.includes("media=cdrom") || str.includes(".iso")) return key;
   }
   return null;
+}
+
+async function listMediaStorages(
+  session: Session,
+  contentKind: "iso" | "vztmpl",
+): Promise<{ node: string; storage: string; shared?: number }[]> {
+  const out: { node: string; storage: string; shared?: number }[] = [];
+  const seen = new Set<string>();
+  const nodes = await listNodes(session);
+
+  for (const node of nodes) {
+    const storages = await listNodeStorages(session, node);
+    for (const store of storages) {
+      if (store.enabled === 0) continue;
+      if (!storageHasContent(store.content, contentKind)) continue;
+      const key = `${node}:${store.storage}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ node, storage: store.storage, shared: store.shared });
+    }
+  }
+
+  return out;
+}
+
+type IsoUsageEntry = {
+  node: string;
+  vmid: number;
+  name: string;
+  drive: string;
+};
+
+function isoVolidFromDrive(value: string): string | null {
+  const part = value.split(",")[0]?.trim() || "";
+  if (!part || part === "none" || part === "cdrom") return null;
+  if (part.includes(".iso") || /:iso\//i.test(part)) return part;
+  return null;
+}
+
+async function listIsoUsage(session: Session): Promise<Record<string, IsoUsageEntry[]>> {
+  type ResourceRow = {
+    type?: string;
+    node?: string;
+    vmid?: number;
+    name?: string;
+    template?: number;
+  };
+
+  const resources =
+    (await pveRequest<ResourceRow[]>(session, "GET", "/cluster/resources")) || [];
+  const vms = resources.filter(
+    (r) =>
+      r.type === "qemu" &&
+      r.node &&
+      r.vmid != null &&
+      !r.template,
+  );
+
+  const usage: Record<string, IsoUsageEntry[]> = {};
+
+  await Promise.all(
+    vms.map(async (vm) => {
+      try {
+        const config = await pveRequest<Record<string, unknown>>(
+          session,
+          "GET",
+          `/nodes/${encodeURIComponent(vm.node!)}/qemu/${encodeURIComponent(String(vm.vmid))}/config`,
+        );
+        for (const [key, value] of Object.entries(config || {})) {
+          if (!/^(ide|sata|scsi)\d+$/i.test(key)) continue;
+          const volid = isoVolidFromDrive(String(value));
+          if (!volid) continue;
+          const entry: IsoUsageEntry = {
+            node: vm.node!,
+            vmid: vm.vmid!,
+            name: vm.name || `VM ${vm.vmid}`,
+            drive: key,
+          };
+          (usage[volid] ||= []).push(entry);
+        }
+      } catch {
+        /* skip unreachable VMs */
+      }
+    }),
+  );
+
+  return usage;
 }
 
 async function listRecentTasks(session: Session, limit = 50): Promise<
@@ -466,6 +562,150 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
       const session = sessionOf(req);
       const storages = await listBackupStorages(session);
       res.json({ storages });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  app.get("/api/media/storages", requireSession, async (req, res) => {
+    try {
+      const session = sessionOf(req);
+      const content = String(req.query.content || "iso");
+      if (content !== "iso" && content !== "vztmpl") {
+        res.status(400).json({ error: "content must be iso or vztmpl." });
+        return;
+      }
+      const storages = await listMediaStorages(session, content);
+      res.json({ storages });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  app.get("/api/media/iso-usage", requireSession, async (req, res) => {
+    try {
+      const session = sessionOf(req);
+      const usage = await listIsoUsage(session);
+      res.json({ usage });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  app.delete("/api/media", requireSession, async (req, res) => {
+    try {
+      const session = sessionOf(req);
+      const node = (req.body?.node ?? req.query.node) as string | undefined;
+      const storage = (req.body?.storage ?? req.query.storage) as string | undefined;
+      const volume = (req.body?.volume ?? req.query.volume) as string | undefined;
+      if (!node || !storage || !volume) {
+        res.status(400).json({ error: "node, storage, and volume are required." });
+        return;
+      }
+      const { storage: volStorage, volname } = parseVolid(volume);
+      const store = storage || volStorage;
+      await pveRequest(
+        session,
+        "DELETE",
+        `/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(store)}/content/${encodeURIComponent(volname)}`,
+      );
+      res.json({ ok: true });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  app.post(
+    "/api/media/upload",
+    requireSession,
+    mediaUpload.single("file"),
+    async (req, res) => {
+      const tmpPath = req.file?.path;
+      try {
+        const session = sessionOf(req);
+        const node = String(req.body?.node || "");
+        const storage = String(req.body?.storage || "");
+        const content = String(req.body?.content || "iso");
+        if (!node || !storage) {
+          res.status(400).json({ error: "node and storage are required." });
+          return;
+        }
+        if (content !== "iso" && content !== "vztmpl") {
+          res.status(400).json({ error: "content must be iso or vztmpl." });
+          return;
+        }
+        if (!req.file || !tmpPath) {
+          res.status(400).json({ error: "file is required." });
+          return;
+        }
+        const filename =
+          String(req.body?.filename || "").trim() ||
+          req.file.originalname ||
+          "upload.bin";
+
+        const form = new FormData();
+        form.append("content", content);
+        form.append("filename", filename);
+        form.append("file", await openAsBlob(tmpPath), filename);
+
+        const raw = await pveFormUpload(
+          session,
+          `/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/upload`,
+          form,
+        );
+        res.json({ ok: true, upid: unwrapUpid(raw) });
+      } catch (err) {
+        sendError(res, err);
+      } finally {
+        if (tmpPath) {
+          try {
+            await unlink(tmpPath);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    },
+  );
+
+  app.post("/api/media/download-url", requireSession, async (req, res) => {
+    try {
+      const session = sessionOf(req);
+      const {
+        node,
+        storage,
+        url,
+        filename,
+        content,
+        checksum,
+        checksumAlgorithm,
+      } = (req.body || {}) as {
+        node?: string;
+        storage?: string;
+        url?: string;
+        filename?: string;
+        content?: "iso" | "vztmpl";
+        checksum?: string;
+        checksumAlgorithm?: string;
+      };
+      if (!node || !storage || !url || !filename) {
+        res.status(400).json({ error: "node, storage, url, and filename are required." });
+        return;
+      }
+      const kind = content === "vztmpl" ? "vztmpl" : "iso";
+      const raw = await pveRequest(
+        session,
+        "POST",
+        `/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/download-url`,
+        {
+          content: kind,
+          filename,
+          url,
+          checksum: checksum || undefined,
+          "checksum-algorithm": checksumAlgorithm || undefined,
+        },
+      );
+      res.json({ ok: true, upid: unwrapUpid(raw) });
     } catch (err) {
       sendError(res, err);
     }

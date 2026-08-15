@@ -166,6 +166,43 @@ export async function pveRequest<T = unknown>(
   return json.data as T;
 }
 
+/** Multipart upload (ISO/template). Do not set Content-Type — boundary is set by the client. */
+export async function pveFormUpload<T = unknown>(
+  session: Session,
+  apiPath: string,
+  form: FormData,
+): Promise<T> {
+  const url = `${session.host}/api2/json${apiPath}`;
+  const res = await undiciFetch(url, {
+    method: "POST",
+    headers: authHeaders(session, "POST"),
+    body: form,
+    dispatcher: dispatcher(session.rejectUnauthorized),
+    // Large ISO uploads can take a long time.
+    headersTimeout: 0,
+    bodyTimeout: 0,
+  });
+
+  const json = (await res.json()) as { data?: T; errors?: unknown; message?: string };
+
+  if (!res.ok) {
+    const extra =
+      json.errors && typeof json.errors === "object"
+        ? Object.entries(json.errors as Record<string, string>)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join("; ")
+        : "";
+    const parts = [json.message, extra].filter((s) => typeof s === "string" && s.trim());
+    throw new ProxmoxApiError(
+      res.status,
+      parts.join(" — ") || `Proxmox error (${res.status})`,
+      json,
+    );
+  }
+
+  return json.data as T;
+}
+
 export async function waitForTask(
   session: Session,
   node: string,

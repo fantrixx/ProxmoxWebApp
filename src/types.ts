@@ -134,6 +134,15 @@ export type MediaItem = {
   vmid?: number;
 };
 
+export type MediaStorage = { node: string; storage: string; shared?: number };
+
+export type IsoUsageEntry = {
+  node: string;
+  vmid: number;
+  name: string;
+  drive: string;
+};
+
 export type BackupStorage = { node: string; storage: string; shared?: number };
 
 export type BackupOverviewGuest = {
