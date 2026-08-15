@@ -1,4 +1,5 @@
 import { Outlet } from "react-router-dom";
+import { ClusterStatusBar } from "../components/ClusterStatusBar";
 import { MobileTabBar, Sidebar } from "../components/Sidebar";
 import { Toasts } from "../components/Toasts";
 import { useApp } from "../context";
@@ -18,9 +19,12 @@ export default function AppShell() {
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-bg md:flex-row">
       <Sidebar />
-      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain">
-        <Outlet />
-      </main>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <ClusterStatusBar />
+        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain">
+          <Outlet />
+        </main>
+      </div>
       <MobileTabBar />
       <ToastStack />
     </div>

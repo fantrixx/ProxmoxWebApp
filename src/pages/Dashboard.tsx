@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Search } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Header } from "../components/Header";
 import { GuestCard } from "../components/GuestCard";
 import { CreateGuestDialog } from "../components/CreateGuestDialog";
 import { UpdateBanner } from "../components/UpdateBanner";
 import { useGuestRates, useResources } from "../hooks";
-import { cpuPct } from "../format";
-import type { ClusterResource, GuestType } from "../types";
+import type { GuestType } from "../types";
 
 const FILTERS_KEY = "proxpanel.overview.filters";
 
@@ -49,12 +49,23 @@ function scrollToId(id: string) {
 
 export default function Dashboard() {
   const q = useResources();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [filters, setFilters] = useState<OverviewFilters>(() => loadFilters());
   const [createType, setCreateType] = useState<GuestType | null>(null);
 
   useEffect(() => {
     localStorage.setItem(FILTERS_KEY, JSON.stringify(filters));
   }, [filters]);
+
+  // Cluster status bar deep-link: /?running=1
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("running") !== "1") return;
+    setFilters((f) => ({ ...f, onlyRunning: true }));
+    navigate("/", { replace: true });
+    requestAnimationFrame(() => scrollToId("overview-guests"));
+  }, [location.search, navigate]);
 
   const resources = q.data?.resources;
   const rates = useGuestRates(resources);
@@ -65,14 +76,11 @@ export default function Dashboard() {
     const guests = list.filter(
       (r) => (r.type === "lxc" || r.type === "qemu") && !r.template,
     );
-    const running = guests.filter((g) => g.status === "running").length;
     const cluster = q.data?.cluster || [];
     const clusterName =
       cluster.find((c) => c.type === "cluster")?.name || nodes[0]?.node || "Cluster";
-    return { nodes, guests, running, clusterName };
+    return { nodes, guests, clusterName };
   }, [resources, q.data?.cluster]);
-
-  const clusterCpu = useMemo(() => avgCpu(view.nodes), [view.nodes]);
 
   const filtered = useMemo(() => {
     return view.guests.filter((g) => {
@@ -91,11 +99,6 @@ export default function Dashboard() {
 
   function clearFilters() {
     setFilters(defaultFilters);
-  }
-
-  function focusGuestsRunning() {
-    setFilters((f) => ({ ...f, onlyRunning: true }));
-    requestAnimationFrame(() => scrollToId("overview-guests"));
   }
 
   return (
@@ -122,20 +125,6 @@ export default function Dashboard() {
             {(q.error as Error).message}
           </p>
         ) : null}
-
-        <section className="grid gap-4 md:grid-cols-2">
-          <GuestRunningStat
-            running={view.running}
-            total={view.guests.length}
-            onClick={focusGuestsRunning}
-          />
-          <Stat
-            title="CPU Cluster"
-            value={clusterCpu.label}
-            hint="Average across all nodes"
-            percent={clusterCpu.percent}
-          />
-        </section>
 
         <section id="overview-guests" className="scroll-mt-28 md:scroll-mt-32">
           <div className="sticky top-16 z-30 -mx-4 mb-3 border-b border-line bg-bg/95 px-4 py-3 backdrop-blur md:top-20 md:-mx-8 md:px-8">
@@ -304,107 +293,4 @@ function KindChip({
       {children}
     </button>
   );
-}
-
-function GuestRunningStat({
-  running,
-  total,
-  onClick,
-}: {
-  running: number;
-  total: number;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="rounded-2xl border border-line bg-surface p-5 text-left transition hover:border-line-2 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-    >
-      <div className="text-xs text-muted">Guests</div>
-      <div className="mt-1 flex items-end gap-4">
-        <div>
-          <div className="text-3xl font-semibold tracking-tight text-good tabular-nums">
-            {running}
-          </div>
-          <div className="mt-0.5 text-xs font-medium text-good/80">running</div>
-        </div>
-        <div className="mb-0.5 h-8 w-px shrink-0 bg-line" aria-hidden />
-        <div>
-          <div className="text-2xl font-semibold tracking-tight tabular-nums text-ink/90">
-            {total}
-          </div>
-          <div className="mt-0.5 text-xs text-muted">total</div>
-        </div>
-      </div>
-      <div className="mt-2 text-xs text-muted">Click to show running only</div>
-    </button>
-  );
-}
-
-function Stat({
-  title,
-  value,
-  hint,
-  percent,
-  onClick,
-}: {
-  title: string;
-  value: string;
-  hint: string;
-  /** When set, show a usage bar under the value (0–100). */
-  percent?: number | null;
-  onClick?: () => void;
-}) {
-  const className =
-    "rounded-2xl border border-line bg-surface p-5 text-left transition";
-  const body = (
-    <>
-      <div className="text-xs text-muted">{title}</div>
-      <div className="mt-1 text-2xl font-semibold tracking-tight">{value}</div>
-      {percent != null && Number.isFinite(percent) ? <UsageBar percent={percent} /> : null}
-      <div className="mt-1 text-xs text-muted">{hint}</div>
-    </>
-  );
-  if (onClick) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        className={`${className} cursor-pointer hover:border-line-2 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40`}
-      >
-        {body}
-      </button>
-    );
-  }
-  return <div className={className}>{body}</div>;
-}
-
-function UsageBar({ percent }: { percent: number }) {
-  const clamped = Math.min(100, Math.max(0, percent));
-  const tone =
-    clamped >= 90 ? "bg-bad" : clamped >= 75 ? "bg-warn" : "bg-good";
-
-  return (
-    <div
-      className="mt-3 h-2 overflow-hidden rounded-full bg-bg"
-      role="meter"
-      aria-valuenow={Math.round(clamped)}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-label="CPU cluster usage"
-    >
-      <div
-        className={`h-full rounded-full transition-all duration-500 ${tone}`}
-        style={{ width: `${clamped}%` }}
-      />
-    </div>
-  );
-}
-
-function avgCpu(nodes: ClusterResource[]): { label: string; percent: number | null } {
-  if (!nodes.length) return { label: "—", percent: null };
-  const avg = nodes.reduce((s, n) => s + (n.cpu || 0), 0) / nodes.length;
-  const percent = cpuPct(avg);
-  return { label: `${percent.toFixed(1)} %`, percent };
 }
