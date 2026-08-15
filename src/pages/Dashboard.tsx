@@ -101,9 +101,15 @@ export default function Dashboard() {
       <Header
         title="Overview"
         subtitle={
-          q.data?.version
-            ? `${view.clusterName} · Proxmox VE ${q.data.version.version}`
-            : view.clusterName
+          [
+            view.clusterName,
+            q.data?.version ? `Proxmox VE ${q.data.version.version}` : null,
+            view.nodes.length
+              ? `${view.nodes.length} ${view.nodes.length === 1 ? "node" : "nodes"}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")
         }
       />
       <div className="space-y-6 px-4 py-4 md:space-y-8 md:px-8 md:py-6">
@@ -115,17 +121,12 @@ export default function Dashboard() {
           </p>
         ) : null}
 
-        <section className="grid gap-4 md:grid-cols-3">
+        <section className="grid gap-4 md:grid-cols-2">
           <Stat
             title="Guests"
             value={`${view.running} / ${view.guests.length}`}
             hint="running / total · click to show running"
             onClick={focusGuestsRunning}
-          />
-          <Stat
-            title="Nodes"
-            value={String(view.nodes.length)}
-            hint="in cluster · see sidebar"
           />
           <Stat
             title="CPU Cluster"
