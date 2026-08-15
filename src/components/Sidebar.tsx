@@ -118,12 +118,12 @@ function SidebarGuests() {
   return (
     <div className="mt-3 border-t border-line/80 pt-3">
       <p className="mb-2 px-2 text-[11px] font-medium uppercase tracking-wide text-muted">
-        Guests
+        Containers
       </p>
       <button
         type="button"
         onClick={() => navigate("/?running=1")}
-        title="Show running guests on Overview"
+        title="Show running containers on Overview"
         className="flex w-full items-center gap-3 rounded-xl border border-line/80 bg-surface/50 px-2.5 py-2 text-left transition hover:border-line-2 hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
       >
         <span className="min-w-0">

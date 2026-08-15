@@ -137,7 +137,7 @@ export default function Dashboard() {
                     onChange={(e) =>
                       setFilters((f) => ({ ...f, qtext: e.target.value }))
                     }
-                    placeholder="Search guests…"
+                    placeholder="Search containers…"
                     className="w-full rounded-lg border border-line bg-surface py-1.5 pr-2 pl-8 text-sm outline-none focus:border-accent md:py-2 md:pl-9"
                   />
                 </div>
@@ -208,9 +208,9 @@ export default function Dashboard() {
               <p className="text-sm text-muted">
                 {filtersActive
                   ? filters.onlyRunning && !filters.qtext.trim() && filters.kind === "all"
-                    ? "No running guests."
-                    : "No guests match these filters."
-                  : "No guests found."}
+                    ? "No running containers."
+                    : "No containers match these filters."
+                  : "No containers found."}
               </p>
               <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                 {filtersActive ? (

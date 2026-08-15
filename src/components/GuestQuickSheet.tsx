@@ -112,7 +112,7 @@ export function GuestQuickSheet({
 
   function shell() {
     if (!running) {
-      toast("err", "Shell is only available for running guests.");
+      toast("err", "Shell is only available for running containers.");
       return;
     }
     openConsole({ type, node, vmid: vmidNum, name });

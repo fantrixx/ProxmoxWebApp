@@ -86,8 +86,8 @@ export function GlobalSearch() {
             autoFocus
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Guests, storage…"
-            className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+            placeholder="Containers, storage…"
+            className="min-w-0 flex-1 bg-transparent text-base outline-none md:text-sm"
             onKeyDown={(e) => {
               if (e.key === "Escape") {
                 setOpen(false);
@@ -109,13 +109,13 @@ export function GlobalSearch() {
         </div>
         <div className="max-h-72 overflow-y-auto py-1">
           {!q.trim() ? (
-            <p className="px-3 py-2 text-xs text-muted">Type to search guests or storage.</p>
+            <p className="px-3 py-2 text-xs text-muted">Type to search containers or storage.</p>
           ) : (
             <>
               {results.guests.length > 0 ? (
                 <div>
                   <p className="px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-muted">
-                    Guests
+                    Containers
                   </p>
                   {results.guests.map((g) => (
                     <button

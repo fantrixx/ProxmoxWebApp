@@ -119,7 +119,7 @@ export default function GuestDetail() {
 
   function shell() {
     if (!running) {
-      toast("err", "Shell is only available for running guests.");
+      toast("err", "Shell is only available for running containers.");
       return;
     }
     openConsole({ type: guestType, node: node!, vmid: Number(vmid), name });

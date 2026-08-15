@@ -104,7 +104,7 @@ export default function BackupsPage() {
         subtitle={
           q.isLoading
             ? "Loading backup overview…"
-            : `${withBackup} of ${(q.data?.guests || []).length} guests have a backup · ${withSchedule} scheduled`
+            : `${withBackup} of ${(q.data?.guests || []).length} containers have a backup · ${withSchedule} scheduled`
         }
       />
 
@@ -146,7 +146,7 @@ export default function BackupsPage() {
         ) : q.isLoading ? (
           <p className="text-sm text-muted">Scanning backup storages…</p>
         ) : rows.length === 0 ? (
-          <p className="text-sm text-muted">No guests match these filters.</p>
+          <p className="text-sm text-muted">No containers match these filters.</p>
         ) : (
           <>
             <div className="mb-2 hidden text-[11px] text-muted lg:grid lg:grid-cols-[minmax(0,1.15fr)_3.5rem_6.5rem_minmax(0,0.9fr)_4rem_5rem_minmax(0,0.75fr)_7rem] lg:gap-3 lg:px-3">

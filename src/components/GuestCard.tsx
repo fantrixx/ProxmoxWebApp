@@ -97,7 +97,7 @@ export function GuestCard({
 
   function shell() {
     if (!running) {
-      toast("err", "Shell is only available for running guests.");
+      toast("err", "Shell is only available for running containers.");
       return;
     }
     if (!guest.node || guest.vmid == null) return;
