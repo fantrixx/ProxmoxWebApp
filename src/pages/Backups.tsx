@@ -59,7 +59,7 @@ export default function BackupsPage() {
   const withBackup = (q.data?.guests || []).filter((g) => g.lastBackup).length;
 
   return (
-    <div>
+    <div className="max-w-full overflow-x-hidden">
       <Header
         title="Backups"
         subtitle={
@@ -69,18 +69,18 @@ export default function BackupsPage() {
         }
       />
 
-      <div className="px-4 py-4 md:px-8 md:py-6">
+      <div className="max-w-full px-4 py-4 md:px-8 md:py-6">
         <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="relative w-full lg:max-w-xs">
+          <div className="relative w-full min-w-0 lg:max-w-xs">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
             <input
               value={qtext}
               onChange={(e) => setQtext(e.target.value)}
               placeholder="Search name, VMID, node…"
-              className="w-full rounded-xl border border-line bg-surface py-2.5 pr-3 pl-9 text-base outline-none focus:border-accent md:text-sm"
+              className="w-full min-w-0 rounded-xl border border-line bg-surface py-2.5 pr-3 pl-9 text-base outline-none focus:border-accent md:text-sm"
             />
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <KindChip active={kind === "all"} onClick={() => setKind("all")}>
               All
             </KindChip>
@@ -93,7 +93,7 @@ export default function BackupsPage() {
             <button
               type="button"
               onClick={() => setSortDir((d) => (d === "desc" ? "asc" : "desc"))}
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-line px-3 text-xs text-muted hover:bg-surface-2 hover:text-ink sm:min-h-0 sm:py-1.5"
+              className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 text-xs text-muted hover:bg-surface-2 hover:text-ink sm:min-h-0 sm:py-1.5"
               title="Sort by last backup date"
             >
               <ArrowDownUp className="size-3.5" />
@@ -118,53 +118,77 @@ export default function BackupsPage() {
               <span>Size</span>
               <span>Location</span>
             </div>
-            <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
+            <ul className="max-w-full divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
               {rows.map((row) => (
-                <li key={`${row.type}-${row.node}-${row.vmid}`}>
+                <li key={`${row.type}-${row.node}-${row.vmid}`} className="min-w-0">
                   <button
                     type="button"
                     onClick={() => setSelected(row)}
-                    className="grid w-full gap-2 px-3 py-3 text-left transition hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40 md:grid-cols-[minmax(0,1.4fr)_5.5rem_7.5rem_5rem_6.5rem_minmax(0,1fr)] md:items-center md:gap-3"
+                    className="grid w-full min-w-0 cursor-pointer gap-2 overflow-hidden px-3 py-3 text-left transition hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40 md:grid-cols-[minmax(0,1.4fr)_5.5rem_7.5rem_5rem_6.5rem_minmax(0,1fr)] md:items-center md:gap-3"
                   >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <GuestTypeIcon type={row.type} className="size-3.5" />
+                    <div className="min-w-0 overflow-hidden">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <GuestTypeIcon type={row.type} className="size-3.5 shrink-0" />
                         <span className="truncate font-medium">{row.name}</span>
                       </div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-muted">
-                        <span>
+                      <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-muted">
+                        <span className="truncate">
                           {guestLabel(row.type)} {row.vmid} · {row.node}
                         </span>
                         <StatusBadge status={row.status} />
                       </div>
                     </div>
-                    <div className="text-xs text-muted md:text-sm md:text-ink">
-                      <span className="md:hidden text-muted">Type · </span>
-                      {guestLabel(row.type)}
+
+                    {/* Mobile summary */}
+                    <div className="min-w-0 space-y-1 text-xs text-muted md:hidden">
+                      <div className="flex min-w-0 justify-between gap-3">
+                        <span>Last backup</span>
+                        <span className="truncate text-ink">
+                          {row.lastBackup?.ctime
+                            ? formatSnapTime(row.lastBackup.ctime)
+                            : "Never"}
+                        </span>
+                      </div>
+                      <div className="flex min-w-0 justify-between gap-3">
+                        <span>Format / size</span>
+                        <span className="truncate font-mono text-ink/90">
+                          {formatLabel(row.lastBackup)}
+                          {row.lastBackup ? ` · ${formatBytes(row.lastBackup.size)}` : ""}
+                        </span>
+                      </div>
+                      <div className="flex min-w-0 justify-between gap-3">
+                        <span>Where</span>
+                        <span className="truncate font-mono text-ink/90">
+                          {row.lastBackup
+                            ? `${row.lastBackup.storage}${
+                                row.lastBackup.node ? ` @ ${row.lastBackup.node}` : ""
+                              }`
+                            : "—"}
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-xs md:text-sm">
-                      <span className="md:hidden text-muted">Last · </span>
+
+                    {/* Desktop columns */}
+                    <div className="hidden min-w-0 md:block md:text-sm">{guestLabel(row.type)}</div>
+                    <div className="hidden min-w-0 truncate md:block md:text-sm">
                       {row.lastBackup?.ctime
                         ? formatSnapTime(row.lastBackup.ctime)
                         : "Never"}
                     </div>
-                    <div className="font-mono text-xs text-muted md:text-ink/80">
-                      <span className="md:hidden">Format · </span>
+                    <div className="hidden min-w-0 truncate font-mono text-ink/80 md:block md:text-xs">
                       {formatLabel(row.lastBackup)}
                     </div>
-                    <div className="font-mono text-xs md:text-sm">
-                      <span className="md:hidden text-muted">Size · </span>
+                    <div className="hidden min-w-0 truncate font-mono md:block md:text-sm">
                       {row.lastBackup ? formatBytes(row.lastBackup.size) : "—"}
                     </div>
-                    <div className="min-w-0 text-xs text-muted md:text-sm">
-                      <span className="md:hidden">Where · </span>
+                    <div className="hidden min-w-0 truncate text-sm md:block">
                       {row.lastBackup ? (
-                        <span className="truncate">
+                        <>
                           <span className="font-mono text-ink/80">
                             {row.lastBackup.storage}
                           </span>
                           {row.lastBackup.node ? ` @ ${row.lastBackup.node}` : ""}
-                        </span>
+                        </>
                       ) : (
                         "—"
                       )}
@@ -197,7 +221,7 @@ function KindChip({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex min-h-11 items-center rounded-lg border px-3 text-xs font-medium sm:min-h-0 sm:py-1.5 ${
+      className={`inline-flex min-h-11 cursor-pointer items-center rounded-lg border px-3 text-xs font-medium sm:min-h-0 sm:py-1.5 ${
         active
           ? "border-accent bg-accent/15 text-accent"
           : "border-line text-muted hover:bg-surface-2"
@@ -238,11 +262,11 @@ function BackupOverviewDialog({
   }, [history.data, backup?.volid]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:items-center sm:p-6">
-      <div className="flex max-h-[min(90dvh,820px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-x-hidden bg-black/70 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:items-center sm:p-6">
+      <div className="flex max-h-[min(90dvh,820px)] w-full max-w-lg min-w-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl">
         <div className="shrink-0 border-b border-line px-5 py-4">
           <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
+            <div className="min-w-0 overflow-hidden">
               <h2 className="truncate text-lg font-semibold tracking-tight">
                 Backup details
               </h2>
@@ -253,7 +277,7 @@ function BackupOverviewDialog({
             <button
               type="button"
               onClick={onClose}
-              className="min-h-11 min-w-11 shrink-0 rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-ink sm:min-h-0 sm:min-w-0"
+              className="min-h-11 min-w-11 shrink-0 cursor-pointer rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-ink sm:min-h-0 sm:min-w-0"
               aria-label="Close"
             >
               <X className="size-4" />
@@ -261,7 +285,7 @@ function BackupOverviewDialog({
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 min-w-0 flex-1 space-y-5 overflow-x-hidden overflow-y-auto overscroll-contain px-5 py-4">
           {!backup ? (
             <div className="rounded-xl border border-dashed border-line bg-bg/40 px-4 py-8 text-center">
               <HardDriveDownload className="mx-auto size-8 text-muted" />
@@ -271,7 +295,7 @@ function BackupOverviewDialog({
               </p>
             </div>
           ) : (
-            <dl className="grid gap-3 sm:grid-cols-2">
+            <dl className="grid min-w-0 gap-3 sm:grid-cols-2">
               <Detail label="When" value={formatSnapTime(backup.ctime)} />
               <Detail label="Size" value={formatBytes(backup.size)} />
               <Detail label="Format" value={formatLabel(backup)} />
@@ -297,7 +321,7 @@ function BackupOverviewDialog({
             </dl>
           )}
 
-          <div>
+          <div className="min-w-0">
             <div className="mb-2 flex items-center justify-between gap-2">
               <h3 className="text-sm font-medium text-muted">Other backups</h3>
               <span className="text-[11px] text-muted">
@@ -313,11 +337,11 @@ function BackupOverviewDialog({
                 {backup ? "No older backups." : "No backups found."}
               </p>
             ) : (
-              <ul className="max-h-48 divide-y divide-line overflow-y-auto rounded-xl border border-line">
+              <ul className="max-h-48 min-w-0 divide-y divide-line overflow-x-hidden overflow-y-auto rounded-xl border border-line">
                 {others.map((item) => (
-                  <li key={item.volid} className="px-3 py-2.5 text-xs">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
+                  <li key={item.volid} className="min-w-0 px-3 py-2.5 text-xs">
+                    <div className="flex min-w-0 items-start justify-between gap-2">
+                      <div className="min-w-0 overflow-hidden">
                         <p className="font-medium">{formatSnapTime(item.ctime)}</p>
                         <p className="mt-0.5 truncate text-muted">
                           <span className="font-mono">{item.storage}</span>
@@ -339,13 +363,13 @@ function BackupOverviewDialog({
           <button
             type="button"
             onClick={onClose}
-            className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm hover:bg-surface-2 sm:min-h-0"
+            className="min-h-11 cursor-pointer rounded-lg border border-line px-4 py-2 text-sm hover:bg-surface-2 sm:min-h-0"
           >
             Close
           </button>
           <Link
             to={`/guest/${guest.type}/${encodeURIComponent(guest.node)}/${guest.vmid}`}
-            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-medium text-black hover:bg-accent-2 sm:min-h-0"
+            className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-medium text-black hover:bg-accent-2 sm:min-h-0"
             onClick={onClose}
           >
             Open guest
@@ -368,10 +392,12 @@ function Detail({
   className?: string;
 }) {
   return (
-    <div className={className}>
+    <div className={`min-w-0 overflow-hidden ${className}`}>
       <dt className="text-[11px] text-muted">{label}</dt>
       <dd
-        className={`mt-0.5 break-all text-sm ${mono ? "font-mono text-ink/90" : ""}`}
+        className={`mt-0.5 break-all text-sm [overflow-wrap:anywhere] ${
+          mono ? "font-mono text-ink/90" : ""
+        }`}
       >
         {value}
       </dd>

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -38,6 +38,7 @@ type PowerKind = keyof typeof POWER_CONFIRMS;
 
 export default function GuestDetail() {
   const { type, node, vmid } = useParams();
+  const navigate = useNavigate();
   const { openConsole, toast } = useApp();
   const action = useGuestAction();
   const [confirm, setConfirm] = useState<PowerKind | null>(null);
@@ -80,16 +81,20 @@ export default function GuestDetail() {
   const meta = confirm ? POWER_CONFIRMS[confirm] : null;
 
   return (
-    <div>
+    <div className="max-w-full overflow-x-hidden">
       <Header
         title={name}
         subtitle={`${guestLabel(guestType)} ${vmid} on ${node}`}
       />
-      <div className="space-y-6 px-4 py-4 md:px-8 md:py-6">
-        <Link to="/" className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
+      <div className="max-w-full space-y-6 overflow-x-hidden px-4 py-4 md:px-8 md:py-6">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="inline-flex min-h-11 cursor-pointer items-center gap-1 text-sm text-muted hover:text-ink sm:min-h-0"
+        >
           <ArrowLeft className="size-4" />
           Back
-        </Link>
+        </button>
 
         {q.isError ? (
           <p className="text-sm text-bad">{(q.error as Error).message}</p>
@@ -129,34 +134,34 @@ export default function GuestDetail() {
           </div>
         </div>
 
-        <section className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-2xl border border-line bg-surface p-5">
+        <section className="grid min-w-0 gap-4 md:grid-cols-3">
+          <div className="min-w-0 overflow-hidden rounded-2xl border border-line bg-surface p-5">
             <MetricBar
               label="CPU"
               percent={cpuPct(status?.cpu)}
               detail={`${cpuPct(status?.cpu).toFixed(1)} % · ${status?.cpus ?? config.cores ?? "?"} cores`}
             />
-            <div className="mt-4">
+            <div className="mt-4 min-w-0">
               <Sparkline values={cpuSeries} color="#ff7a1a" />
             </div>
           </div>
-          <div className="rounded-2xl border border-line bg-surface p-5">
+          <div className="min-w-0 overflow-hidden rounded-2xl border border-line bg-surface p-5">
             <MetricBar
               label="RAM"
               percent={usagePct(status?.mem, status?.maxmem)}
               detail={`${formatBytes(status?.mem)} / ${formatBytes(status?.maxmem)}`}
             />
-            <div className="mt-4">
+            <div className="mt-4 min-w-0">
               <Sparkline values={memSeries} color="#4cc9f0" />
             </div>
           </div>
-          <div className="rounded-2xl border border-line bg-surface p-5">
+          <div className="min-w-0 overflow-hidden rounded-2xl border border-line bg-surface p-5">
             <MetricBar
               label="Disk"
               percent={usagePct(status?.disk, status?.maxdisk)}
               detail={`${formatBytes(status?.disk)} / ${formatBytes(status?.maxdisk)}`}
             />
-            <div className="mt-4">
+            <div className="mt-4 min-w-0">
               <Sparkline values={netSeries} color="#34d399" />
             </div>
             <p className="mt-1 text-[11px] text-muted">Network history (in+out)</p>
@@ -171,9 +176,9 @@ export default function GuestDetail() {
         <BackupPanel node={node} type={guestType} vmid={vmid} name={name} />
         <SchedulePanel node={node} type={guestType} vmid={vmid} name={name} />
 
-        <section className="rounded-2xl border border-line bg-surface p-5">
+        <section className="min-w-0 overflow-hidden rounded-2xl border border-line bg-surface p-5">
           <h2 className="mb-4 text-sm font-medium text-muted">Configuration</h2>
-          <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+          <dl className="grid min-w-0 gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
             <Item label="Hostname" value={str(config.hostname || config.name)} />
             <Item label="OS type" value={str(config.ostype)} />
             <Item label="Cores" value={str(config.cores || config.cpulimit)} />
@@ -209,9 +214,11 @@ function str(v: unknown): string | undefined {
 
 function Item({ label, value }: { label: string; value?: string }) {
   return (
-    <div>
+    <div className="min-w-0 overflow-hidden">
       <dt className="text-[11px] text-muted">{label}</dt>
-      <dd className="truncate font-mono text-sm">{value || "—"}</dd>
+      <dd className="break-all font-mono text-sm [overflow-wrap:anywhere]">
+        {value || "—"}
+      </dd>
     </div>
   );
 }
@@ -239,7 +246,7 @@ function Btn({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2.5 text-xs font-medium disabled:opacity-40 sm:min-h-0 sm:w-auto sm:py-1.5 ${tone}`}
+      className={`inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border px-3 py-2.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-0 sm:w-auto sm:py-1.5 ${tone}`}
     >
       {children}
     </button>
