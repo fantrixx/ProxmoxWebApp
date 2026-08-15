@@ -143,6 +143,19 @@ export type IsoUsageEntry = {
   drive: string;
 };
 
+/** Entry from Proxmox appliance catalog (aplinfo / pveam). */
+export type ApplianceInfo = {
+  template: string;
+  package?: string;
+  type?: string;
+  version?: string;
+  section?: string;
+  description?: string;
+  os?: string;
+  headline?: string;
+  location?: string;
+};
+
 export type BackupStorage = { node: string; storage: string; shared?: number };
 
 export type BackupOverviewGuest = {

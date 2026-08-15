@@ -1,4 +1,5 @@
 import type {
+  ApplianceInfo,
   AuthUser,
   BackupOverviewGuest,
   BackupStorage,
@@ -171,7 +172,7 @@ export const dataApi = {
     ),
   mediaIsos: () => api<{ items: MediaItem[] }>("/api/media/isos"),
   mediaTemplates: () => api<{ items: MediaItem[] }>("/api/media/templates"),
-  mediaStorages: (content: "iso" | "vztmpl") =>
+  mediaStorages: (content: "iso" | "vztmpl" | "images" | "rootdir") =>
     api<{ storages: MediaStorage[] }>(
       `/api/media/storages?content=${encodeURIComponent(content)}`,
     ),
@@ -210,6 +211,15 @@ export const dataApi = {
     checksumAlgorithm?: string;
   }) =>
     api<{ ok: boolean; upid?: string }>("/api/media/download-url", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  mediaAppliances: (node?: string) =>
+    api<{ appliances: ApplianceInfo[]; node: string }>(
+      `/api/media/appliances${node ? `?node=${encodeURIComponent(node)}` : ""}`,
+    ),
+  mediaDownloadAppliance: (body: { node: string; storage: string; template: string }) =>
+    api<{ ok: boolean; upid?: string }>("/api/media/appliances/download", {
       method: "POST",
       body: JSON.stringify(body),
     }),
@@ -270,6 +280,32 @@ export const dataApi = {
     api<{ ok: boolean; drive?: string; value?: string }>(
       `/api/guests/${encodeURIComponent(node)}/qemu/${encodeURIComponent(vmid)}/cdrom`,
       { method: "PUT", body: JSON.stringify(body) },
+    ),
+  nextId: () => api<{ nextid: number }>("/api/cluster/nextid"),
+  nodeBridges: (node: string) =>
+    api<{ bridges: { iface: string; active: boolean; comments?: string }[] }>(
+      `/api/nodes/${encodeURIComponent(node)}/bridges`,
+    ),
+  createGuest: (body: {
+    type: "lxc" | "qemu";
+    node: string;
+    vmid: number;
+    name: string;
+    cores: number;
+    memory: number;
+    diskGiB: number;
+    storage: string;
+    bridge: string;
+    start?: boolean;
+    ostemplate?: string;
+    password?: string;
+    swap?: number;
+    unprivileged?: boolean;
+    iso?: string | null;
+  }) =>
+    api<{ ok: boolean; upid?: string; type: "lxc" | "qemu"; node: string; vmid: number }>(
+      "/api/guests",
+      { method: "POST", body: JSON.stringify(body) },
     ),
   schedules: () => api<{ schedules: PowerSchedule[] }>("/api/schedules"),
   saveSchedule: (schedule: PowerSchedule) =>

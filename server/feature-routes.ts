@@ -249,7 +249,7 @@ function findCdromDrive(config: Record<string, unknown>): string | null {
 
 async function listMediaStorages(
   session: Session,
-  contentKind: "iso" | "vztmpl",
+  contentKind: "iso" | "vztmpl" | "images" | "rootdir",
 ): Promise<{ node: string; storage: string; shared?: number }[]> {
   const out: { node: string; storage: string; shared?: number }[] = [];
   const seen = new Set<string>();
@@ -571,8 +571,13 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
     try {
       const session = sessionOf(req);
       const content = String(req.query.content || "iso");
-      if (content !== "iso" && content !== "vztmpl") {
-        res.status(400).json({ error: "content must be iso or vztmpl." });
+      if (
+        content !== "iso" &&
+        content !== "vztmpl" &&
+        content !== "images" &&
+        content !== "rootdir"
+      ) {
+        res.status(400).json({ error: "content must be iso, vztmpl, images, or rootdir." });
         return;
       }
       const storages = await listMediaStorages(session, content);
@@ -703,6 +708,75 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
           url,
           checksum: checksum || undefined,
           "checksum-algorithm": checksumAlgorithm || undefined,
+        },
+      );
+      res.json({ ok: true, upid: unwrapUpid(raw) });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  app.get("/api/media/appliances", requireSession, async (req, res) => {
+    try {
+      const session = sessionOf(req);
+      const nodes = await listNodes(session);
+      if (nodes.length === 0) {
+        res.status(400).json({ error: "No nodes available." });
+        return;
+      }
+      const requested = typeof req.query.node === "string" ? req.query.node.trim() : "";
+      const node = requested && nodes.includes(requested) ? requested : nodes[0];
+      const rows =
+        (await pveRequest<Record<string, unknown>[]>(
+          session,
+          "GET",
+          `/nodes/${encodeURIComponent(node)}/aplinfo`,
+        )) || [];
+
+      const appliances = rows
+        .map((row) => {
+          const template = String(row.template || "").trim();
+          if (!template) return null;
+          return {
+            template,
+            package: row.package != null ? String(row.package) : undefined,
+            type: row.type != null ? String(row.type) : undefined,
+            version: row.version != null ? String(row.version) : undefined,
+            section: row.section != null ? String(row.section) : undefined,
+            description: row.description != null ? String(row.description) : undefined,
+            os: row.os != null ? String(row.os) : undefined,
+            headline: row.headline != null ? String(row.headline) : undefined,
+            location: row.location != null ? String(row.location) : undefined,
+          };
+        })
+        .filter((a): a is NonNullable<typeof a> => a != null)
+        .sort((a, b) => a.template.localeCompare(b.template));
+
+      res.json({ appliances, node });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  app.post("/api/media/appliances/download", requireSession, async (req, res) => {
+    try {
+      const session = sessionOf(req);
+      const { node, storage, template } = (req.body || {}) as {
+        node?: string;
+        storage?: string;
+        template?: string;
+      };
+      if (!node || !storage || !template) {
+        res.status(400).json({ error: "node, storage, and template are required." });
+        return;
+      }
+      const raw = await pveRequest(
+        session,
+        "POST",
+        `/nodes/${encodeURIComponent(node)}/aplinfo`,
+        {
+          storage,
+          template,
         },
       );
       res.json({ ok: true, upid: unwrapUpid(raw) });
@@ -1111,6 +1185,183 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
       });
 
       res.json({ ok: true, drive, value: driveValue });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  app.get("/api/cluster/nextid", requireSession, async (req, res) => {
+    try {
+      const session = sessionOf(req);
+      const nextid = await pveRequest<string | number>(session, "GET", "/cluster/nextid");
+      res.json({ nextid: Number(nextid) });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  app.get("/api/nodes/:node/bridges", requireSession, async (req, res) => {
+    try {
+      const session = sessionOf(req);
+      const node = param(req.params.node);
+      type NetRow = {
+        iface?: string;
+        type?: string;
+        active?: number;
+        comments?: string;
+      };
+      const rows =
+        (await pveRequest<NetRow[]>(
+          session,
+          "GET",
+          `/nodes/${encodeURIComponent(node)}/network`,
+        )) || [];
+      const bridges = rows
+        .filter((r) => r.type === "bridge" && r.iface)
+        .map((r) => ({
+          iface: r.iface!,
+          active: r.active !== 0,
+          comments: r.comments,
+        }))
+        .sort((a, b) => a.iface.localeCompare(b.iface));
+      res.json({ bridges });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  app.post("/api/guests", requireSession, async (req, res) => {
+    try {
+      const session = sessionOf(req);
+      const body = (req.body || {}) as {
+        type?: string;
+        node?: string;
+        vmid?: number | string;
+        name?: string;
+        cores?: number;
+        memory?: number;
+        swap?: number;
+        diskGiB?: number;
+        storage?: string;
+        bridge?: string;
+        ostemplate?: string;
+        password?: string;
+        unprivileged?: boolean;
+        iso?: string | null;
+        start?: boolean;
+      };
+
+      const type = body.type;
+      const node = String(body.node || "").trim();
+      const vmid = Number(body.vmid);
+      const name = String(body.name || "").trim();
+      const cores = Number(body.cores ?? 2);
+      const memory = Number(body.memory ?? 2048);
+      const diskGiB = Number(body.diskGiB ?? 8);
+      const storage = String(body.storage || "").trim();
+      const bridge = String(body.bridge || "vmbr0").trim() || "vmbr0";
+
+      if (type !== "lxc" && type !== "qemu") {
+        res.status(400).json({ error: "type must be lxc or qemu." });
+        return;
+      }
+      if (!node) {
+        res.status(400).json({ error: "node is required." });
+        return;
+      }
+      if (!Number.isFinite(vmid) || vmid < 100 || vmid > 999_999_999) {
+        res.status(400).json({ error: "vmid must be between 100 and 999999999." });
+        return;
+      }
+      if (!name) {
+        res.status(400).json({ error: "name is required." });
+        return;
+      }
+      if (!storage) {
+        res.status(400).json({ error: "storage is required." });
+        return;
+      }
+      if (!Number.isFinite(cores) || cores < 1 || cores > 128) {
+        res.status(400).json({ error: "cores must be between 1 and 128." });
+        return;
+      }
+      if (!Number.isFinite(memory) || memory < 16 || memory > 524288) {
+        res.status(400).json({ error: "memory must be between 16 and 524288 MiB." });
+        return;
+      }
+      if (!Number.isFinite(diskGiB) || diskGiB < 1 || diskGiB > 1024) {
+        res.status(400).json({ error: "disk must be between 1 and 1024 GiB." });
+        return;
+      }
+
+      let raw: unknown;
+
+      if (type === "lxc") {
+        const ostemplate = String(body.ostemplate || "").trim();
+        const password = String(body.password || "");
+        if (!ostemplate) {
+          res.status(400).json({ error: "ostemplate is required for containers." });
+          return;
+        }
+        if (password.length < 5) {
+          res.status(400).json({ error: "password must be at least 5 characters." });
+          return;
+        }
+        const swap = Number(body.swap ?? 512);
+        if (!Number.isFinite(swap) || swap < 0 || swap > 524288) {
+          res.status(400).json({ error: "swap must be between 0 and 524288 MiB." });
+          return;
+        }
+
+        raw = await pveRequest(session, "POST", `/nodes/${encodeURIComponent(node)}/lxc`, {
+          vmid,
+          hostname: name,
+          ostemplate,
+          password,
+          rootfs: `${storage}:${diskGiB}`,
+          cores,
+          memory,
+          swap,
+          net0: `name=eth0,bridge=${bridge},ip=dhcp`,
+          unprivileged: body.unprivileged === false ? 0 : 1,
+          start: body.start ? 1 : undefined,
+        });
+      } else {
+        const iso = body.iso ? String(body.iso).trim() : "";
+        const params: Record<string, string | number | boolean | undefined> = {
+          vmid,
+          name,
+          cores,
+          memory,
+          scsihw: "virtio-scsi-single",
+          scsi0: `${storage}:${diskGiB}`,
+          net0: `virtio,bridge=${bridge}`,
+          ostype: "l26",
+          cpu: "x86-64-v2-AES",
+          agent: "1",
+          start: body.start ? 1 : undefined,
+        };
+        if (iso) {
+          params.ide2 = `${iso},media=cdrom`;
+          params.boot = "order=ide2;scsi0";
+        } else {
+          params.boot = "order=scsi0";
+        }
+        raw = await pveRequest(
+          session,
+          "POST",
+          `/nodes/${encodeURIComponent(node)}/qemu`,
+          params,
+        );
+      }
+
+      res.json({
+        ok: true,
+        upid: unwrapUpid(raw),
+        type,
+        node,
+        vmid,
+      });
     } catch (err) {
       sendError(res, err);
     }

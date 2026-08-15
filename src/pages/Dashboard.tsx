@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { Header } from "../components/Header";
 import { GuestCard } from "../components/GuestCard";
+import { CreateGuestDialog } from "../components/CreateGuestDialog";
 import { UpdateBanner } from "../components/UpdateBanner";
 import { useGuestRates, useResources } from "../hooks";
 import { cpuPct } from "../format";
@@ -49,6 +50,7 @@ function scrollToId(id: string) {
 export default function Dashboard() {
   const q = useResources();
   const [filters, setFilters] = useState<OverviewFilters>(() => loadFilters());
+  const [createType, setCreateType] = useState<GuestType | null>(null);
 
   useEffect(() => {
     localStorage.setItem(FILTERS_KEY, JSON.stringify(filters));
@@ -140,11 +142,29 @@ export default function Dashboard() {
             <div className="flex flex-col gap-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-sm font-medium text-muted">Container & VMs</h2>
-                <p className="text-xs text-muted">
-                  {q.isLoading
-                    ? "Loading…"
-                    : `Showing ${filtered.length} of ${view.guests.length} guests`}
-                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-xs text-muted">
+                    {q.isLoading
+                      ? "Loading…"
+                      : `Showing ${filtered.length} of ${view.guests.length} guests`}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setCreateType("lxc")}
+                    className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-line px-3 py-1.5 text-xs font-medium hover:bg-surface-2 sm:min-h-0"
+                  >
+                    <Plus className="size-3.5" />
+                    New CT
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCreateType("qemu")}
+                    className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-accent px-3 py-1.5 text-xs font-medium text-black hover:bg-accent-2 sm:min-h-0"
+                  >
+                    <Plus className="size-3.5" />
+                    New VM
+                  </button>
+                </div>
               </div>
 
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -209,15 +229,37 @@ export default function Dashboard() {
                     : "No guests match these filters."
                   : "No guests found."}
               </p>
-              {filtersActive ? (
-                <button
-                  type="button"
-                  onClick={clearFilters}
-                  className="mt-3 inline-flex min-h-11 items-center rounded-lg border border-line px-3 py-2 text-sm hover:bg-surface-2 sm:min-h-0 sm:py-1.5"
-                >
-                  Show all
-                </button>
-              ) : null}
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                {filtersActive ? (
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="inline-flex min-h-11 items-center rounded-lg border border-line px-3 py-2 text-sm hover:bg-surface-2 sm:min-h-0 sm:py-1.5"
+                  >
+                    Show all
+                  </button>
+                ) : null}
+                {!filtersActive ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setCreateType("lxc")}
+                      className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm hover:bg-surface-2 sm:min-h-0 sm:py-1.5"
+                    >
+                      <Plus className="size-3.5" />
+                      New CT
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCreateType("qemu")}
+                      className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-black hover:bg-accent-2 sm:min-h-0 sm:py-1.5"
+                    >
+                      <Plus className="size-3.5" />
+                      New VM
+                    </button>
+                  </>
+                ) : null}
+              </div>
             </div>
           ) : (
             <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3">
@@ -228,6 +270,14 @@ export default function Dashboard() {
           )}
         </section>
       </div>
+
+      {createType ? (
+        <CreateGuestDialog
+          open
+          initialType={createType}
+          onClose={() => setCreateType(null)}
+        />
+      ) : null}
     </div>
   );
 }

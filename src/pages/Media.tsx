@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, Search, Trash2, Upload } from "lucide-react";
+import { Download, Package, Search, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { dataApi } from "../api";
@@ -55,6 +55,12 @@ export default function MediaPage() {
   const [downloadName, setDownloadName] = useState("");
   const [downloadTarget, setDownloadTarget] = useState("");
 
+  const [catalogOpen, setCatalogOpen] = useState(false);
+  const [catalogQ, setCatalogQ] = useState("");
+  const [catalogSection, setCatalogSection] = useState("all");
+  const [catalogTarget, setCatalogTarget] = useState("");
+  const [catalogSelected, setCatalogSelected] = useState<string>("");
+
   const [deleteItem, setDeleteItem] = useState<MediaItem | null>(null);
   const [attachItem, setAttachItem] = useState<MediaItem | null>(null);
   const [attachVm, setAttachVm] = useState("");
@@ -78,6 +84,24 @@ export default function MediaPage() {
     queryFn: () => dataApi.mediaStorages(contentKind),
   });
 
+  const templateStorages = useQuery({
+    queryKey: ["mediaStorages", "vztmpl"],
+    queryFn: () => dataApi.mediaStorages("vztmpl"),
+    enabled: catalogOpen,
+  });
+
+  const installedTemplates = useQuery({
+    queryKey: ["mediaTemplates"],
+    queryFn: () => dataApi.mediaTemplates(),
+    enabled: catalogOpen || tab === "templates",
+  });
+
+  const appliances = useQuery({
+    queryKey: ["mediaAppliances"],
+    queryFn: () => dataApi.mediaAppliances(),
+    enabled: catalogOpen,
+  });
+
   const usage = useQuery({
     queryKey: ["mediaIsoUsage"],
     queryFn: () => dataApi.mediaIsoUsage(),
@@ -93,7 +117,37 @@ export default function MediaPage() {
   const active = tab === "isos" ? isos : templates;
   const items = tab === "isos" ? isos.data?.items || [] : templates.data?.items || [];
   const storageOptions = storages.data?.storages || [];
+  const catalogStorageOptions = templateStorages.data?.storages || [];
   const usageMap = usage.data?.usage || {};
+
+  const installedTemplateNames = useMemo(() => {
+    const set = new Set<string>();
+    for (const item of installedTemplates.data?.items || []) {
+      const name = volname(item.volid);
+      set.add(name);
+      const bare = name.includes("/") ? name.slice(name.lastIndexOf("/") + 1) : name;
+      set.add(bare);
+    }
+    return set;
+  }, [installedTemplates.data]);
+
+  const applianceSections = useMemo(() => {
+    const set = new Set<string>();
+    for (const a of appliances.data?.appliances || []) {
+      if (a.section) set.add(a.section);
+    }
+    return [...set].sort();
+  }, [appliances.data]);
+
+  const filteredAppliances = useMemo(() => {
+    const needle = catalogQ.trim().toLowerCase();
+    return (appliances.data?.appliances || []).filter((a) => {
+      if (catalogSection !== "all" && a.section !== catalogSection) return false;
+      if (!needle) return true;
+      const hay = `${a.template} ${a.package || ""} ${a.os || ""} ${a.section || ""} ${a.description || ""} ${a.headline || ""}`.toLowerCase();
+      return hay.includes(needle);
+    });
+  }, [appliances.data, catalogQ, catalogSection]);
 
   useEffect(() => {
     setStorageFilter("all");
@@ -109,6 +163,13 @@ export default function MediaPage() {
       setDownloadTarget(storageKey(storageOptions[0]));
     }
   }, [storageOptions, uploadTarget, downloadTarget]);
+
+  useEffect(() => {
+    if (!catalogOpen) return;
+    if (!catalogTarget && catalogStorageOptions.length === 1) {
+      setCatalogTarget(storageKey(catalogStorageOptions[0]));
+    }
+  }, [catalogOpen, catalogStorageOptions, catalogTarget]);
 
   const storageLabels = useMemo(() => {
     const set = new Set<string>();
@@ -200,6 +261,25 @@ export default function MediaPage() {
     onError: (err: Error) => toast("err", err.message),
   });
 
+  const catalogMut = useMutation({
+    mutationFn: (template: string) => {
+      const target = parseStorageKey(catalogTarget);
+      if (!target) throw new Error("Select a storage.");
+      return dataApi.mediaDownloadAppliance({
+        node: target.node,
+        storage: target.storage,
+        template,
+      });
+    },
+    onSuccess: (_data, template) => {
+      toast("ok", `Download started: ${template}`);
+      setCatalogSelected("");
+      void invalidateMedia();
+      void qc.invalidateQueries({ queryKey: ["mediaAppliances"] });
+    },
+    onError: (err: Error) => toast("err", err.message),
+  });
+
   const deleteMut = useMutation({
     mutationFn: (item: MediaItem) =>
       dataApi.mediaDelete({
@@ -272,6 +352,22 @@ export default function MediaPage() {
             CT Templates
           </TabBtn>
           <div className="ml-auto flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setCatalogOpen(true);
+                setCatalogQ("");
+                setCatalogSection("all");
+                setCatalogSelected("");
+                if (!catalogTarget && catalogStorageOptions.length === 1) {
+                  setCatalogTarget(storageKey(catalogStorageOptions[0]));
+                }
+              }}
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-line px-3 py-2 text-sm hover:bg-surface-2 sm:min-h-0"
+            >
+              <Package className="h-4 w-4" />
+              Catalog
+            </button>
             <button
               type="button"
               onClick={() => setDownloadOpen(true)}
@@ -460,6 +556,120 @@ export default function MediaPage() {
         )}
       </div>
 
+      {catalogOpen ? (
+        <Modal
+          title="Proxmox template catalog"
+          wide
+          onClose={() => !catalogMut.isPending && setCatalogOpen(false)}
+        >
+          <p className="mb-3 text-sm text-muted">
+            Download official CT templates from the Proxmox appliance repository
+            (same as <span className="font-mono text-xs">pveam download</span>).
+            VM ISOs are not in this catalog — use From URL or Upload.
+          </p>
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row">
+            <label className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+              <input
+                value={catalogQ}
+                onChange={(e) => setCatalogQ(e.target.value)}
+                placeholder="Search templates…"
+                className="w-full rounded-xl border border-line bg-bg py-2 pl-9 pr-3 text-sm outline-none focus:border-accent"
+              />
+            </label>
+            <select
+              value={catalogSection}
+              onChange={(e) => setCatalogSection(e.target.value)}
+              className="rounded-xl border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-accent sm:w-40"
+            >
+              <option value="all">All sections</option>
+              {applianceSections.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            <select
+              value={catalogTarget}
+              onChange={(e) => setCatalogTarget(e.target.value)}
+              className="rounded-xl border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-accent sm:w-52"
+            >
+              <option value="">— storage —</option>
+              {catalogStorageOptions.map((s) => (
+                <option key={storageKey(s)} value={storageKey(s)}>
+                  {s.storage} · {s.node}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {appliances.isError ? (
+            <p className="text-sm text-bad">{(appliances.error as Error).message}</p>
+          ) : appliances.isLoading ? (
+            <p className="text-sm text-muted">Loading catalog…</p>
+          ) : filteredAppliances.length === 0 ? (
+            <p className="text-sm text-muted">No templates match.</p>
+          ) : (
+            <div className="max-h-[min(24rem,50vh)] space-y-1 overflow-y-auto rounded-xl border border-line">
+              {filteredAppliances.map((a) => {
+                const installed = installedTemplateNames.has(a.template);
+                const selected = catalogSelected === a.template;
+                return (
+                  <button
+                    key={a.template}
+                    type="button"
+                    onClick={() => setCatalogSelected(a.template)}
+                    className={`flex w-full flex-col gap-0.5 px-3 py-2.5 text-left text-sm hover:bg-surface-2 ${
+                      selected ? "bg-accent/10" : ""
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate font-mono text-xs">
+                        {a.template}
+                      </span>
+                      {installed ? (
+                        <span className="shrink-0 rounded bg-good/15 px-1.5 py-0.5 text-[10px] text-good">
+                          installed
+                        </span>
+                      ) : null}
+                      {a.section ? (
+                        <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted">
+                          {a.section}
+                        </span>
+                      ) : null}
+                    </div>
+                    {(a.headline || a.description) && (
+                      <span className="line-clamp-2 text-xs text-muted">
+                        {a.headline || a.description}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              disabled={catalogMut.isPending}
+              onClick={() => setCatalogOpen(false)}
+              className="rounded-xl border border-line px-3 py-2 text-sm hover:bg-surface-2"
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              disabled={catalogMut.isPending || !catalogSelected || !catalogTarget}
+              onClick={() => catalogMut.mutate(catalogSelected)}
+              className="rounded-xl bg-accent px-3 py-2 text-sm font-medium text-black hover:bg-accent-2 disabled:opacity-40"
+            >
+              {catalogMut.isPending ? "Starting…" : "Download"}
+            </button>
+          </div>
+        </Modal>
+      ) : null}
+
       {downloadOpen ? (
         <Modal
           title={`Download ${tab === "isos" ? "ISO" : "template"} from URL`}
@@ -625,10 +835,12 @@ function Modal({
   title,
   children,
   onClose,
+  wide,
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
+  wide?: boolean;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -640,7 +852,11 @@ function Modal({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:items-center sm:p-6">
-      <div className="w-full max-w-md rounded-2xl border border-line bg-surface p-5 shadow-2xl">
+      <div
+        className={`w-full rounded-2xl border border-line bg-surface p-5 shadow-2xl ${
+          wide ? "max-w-2xl" : "max-w-md"
+        }`}
+      >
         <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
         <div className="mt-4">{children}</div>
       </div>
