@@ -1,5 +1,6 @@
 import type {
   AuthUser,
+  BackupOverviewGuest,
   BackupStorage,
   GuestDetail,
   MediaItem,
@@ -169,6 +170,7 @@ export const dataApi = {
   mediaIsos: () => api<{ items: MediaItem[] }>("/api/media/isos"),
   mediaTemplates: () => api<{ items: MediaItem[] }>("/api/media/templates"),
   backupStorages: () => api<{ storages: BackupStorage[] }>("/api/media/backup-storages"),
+  backupsOverview: () => api<{ guests: BackupOverviewGuest[] }>("/api/backups/overview"),
   storageContent: (node: string, storage: string, content?: string) =>
     api<{ content: MediaItem[] }>(
       `/api/storage/${encodeURIComponent(node)}/${encodeURIComponent(storage)}/content${

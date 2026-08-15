@@ -4,6 +4,7 @@ import {
   Cpu,
   Disc3,
   HardDrive,
+  HardDriveDownload,
   LayoutDashboard,
   ListTodo,
   MonitorSmartphone,
@@ -17,12 +18,15 @@ const desktopItems = [
   { to: "/", label: "Overview", icon: LayoutDashboard, exact: true },
   { to: "/containers", label: "Containers", icon: Box },
   { to: "/vms", label: "VMs", icon: MonitorSmartphone },
+  { to: "/backups", label: "Backups", icon: HardDriveDownload },
   { to: "/tasks", label: "Tasks", icon: ListTodo },
   { to: "/media", label: "Media", icon: Disc3 },
   { to: "/storage", label: "Storage", icon: HardDrive },
 ];
 
-const mobileItems = desktopItems.filter((item) => item.to !== "/storage");
+const mobileItems = desktopItems.filter(
+  (item) => item.to !== "/storage" && item.to !== "/media",
+);
 
 function isActive(pathname: string, item: (typeof desktopItems)[number]) {
   return item.exact ? pathname === item.to : pathname.startsWith(item.to);

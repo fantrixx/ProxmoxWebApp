@@ -12,6 +12,7 @@ const GuestDetail = lazy(() => import("./pages/GuestDetail"));
 const StoragePage = lazy(() => import("./pages/Storage"));
 const TasksPage = lazy(() => import("./pages/Tasks"));
 const MediaPage = lazy(() => import("./pages/Media"));
+const BackupsPage = lazy(() => import("./pages/Backups"));
 const ConsolePage = lazy(() => import("./pages/ConsolePage"));
 
 function PageFallback() {
@@ -61,6 +62,7 @@ export default function App() {
             <Route path="vms" element={<GuestList kind="qemu" />} />
             <Route path="storage" element={<StoragePage />} />
             <Route path="tasks" element={<TasksPage />} />
+            <Route path="backups" element={<BackupsPage />} />
             <Route path="media" element={<MediaPage />} />
             <Route path="guest/:type/:node/:vmid" element={<GuestDetail />} />
           </Route>

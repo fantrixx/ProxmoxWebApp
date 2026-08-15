@@ -134,6 +134,16 @@ export type MediaItem = {
 
 export type BackupStorage = { node: string; storage: string; shared?: number };
 
+export type BackupOverviewGuest = {
+  node: string;
+  type: GuestType;
+  vmid: number;
+  name: string;
+  status?: string;
+  backupCount: number;
+  lastBackup: MediaItem | null;
+};
+
 export type ScheduleAction = "start" | "shutdown" | "stop" | "backup";
 export type BackupMode = "snapshot" | "suspend" | "stop";
 export type BackupCompress = "zstd" | "gzip" | "lzo" | "0";

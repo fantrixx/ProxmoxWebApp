@@ -180,6 +180,55 @@ async function listGuestBackups(
   return backups;
 }
 
+function vmidFromBackupVolid(volid: string): number | undefined {
+  const match = /vzdump-(?:qemu|lxc)-(\d+)-/i.exec(volid);
+  if (!match) return undefined;
+  const n = Number(match[1]);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+async function listAllBackupItems(
+  session: Session,
+): Promise<(ContentRow & { node: string; storage: string })[]> {
+  const items: (ContentRow & { node: string; storage: string })[] = [];
+  const seen = new Set<string>();
+  const nodes = await listNodes(session);
+
+  for (const node of nodes) {
+    const storages = await listNodeStorages(session, node);
+    for (const store of storages) {
+      if (store.enabled === 0) continue;
+      if (!storageHasContent(store.content, "backup")) continue;
+      const dedupeKey = store.shared ? `shared:${store.storage}` : `${node}:${store.storage}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      try {
+        const rows = await pveRequest<ContentRow[]>(
+          session,
+          "GET",
+          `/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(store.storage)}/content`,
+          { content: "backup" },
+        );
+        for (const row of rows || []) {
+          const { storage } = parseVolid(row.volid);
+          const vmid = row.vmid ?? vmidFromBackupVolid(row.volid);
+          items.push({
+            ...row,
+            vmid,
+            volid: row.volid,
+            node,
+            storage: storage || store.storage,
+          });
+        }
+      } catch {
+        /* skip unavailable storage */
+      }
+    }
+  }
+
+  return items;
+}
+
 function findCdromDrive(config: Record<string, unknown>): string | null {
   for (const [key, value] of Object.entries(config)) {
     if (!/^(ide|sata|scsi)\d+$/i.test(key)) continue;
@@ -600,6 +649,74 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
         return;
       }
       res.json({ ok: true, upid });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  app.get("/api/backups/overview", requireSession, async (req, res) => {
+    try {
+      const session = sessionOf(req);
+      type ResourceRow = {
+        type?: string;
+        node?: string;
+        vmid?: number;
+        name?: string;
+        status?: string;
+        template?: number;
+      };
+
+      const [resources, backups] = await Promise.all([
+        pveRequest<ResourceRow[]>(session, "GET", "/cluster/resources"),
+        listAllBackupItems(session),
+      ]);
+
+      const byVmid = new Map<number, (ContentRow & { node: string; storage: string })[]>();
+      for (const row of backups) {
+        const vmid = row.vmid ?? vmidFromBackupVolid(row.volid);
+        if (vmid == null) continue;
+        const list = byVmid.get(vmid) || [];
+        list.push({ ...row, vmid });
+        byVmid.set(vmid, list);
+      }
+
+      const guests = (resources || [])
+        .filter(
+          (r) =>
+            (r.type === "lxc" || r.type === "qemu") &&
+            !r.template &&
+            r.node &&
+            r.vmid != null,
+        )
+        .map((r) => {
+          const vmid = Number(r.vmid);
+          const list = [...(byVmid.get(vmid) || [])].sort(
+            (a, b) => (b.ctime || 0) - (a.ctime || 0),
+          );
+          const last = list[0];
+          return {
+            node: r.node!,
+            type: r.type as "lxc" | "qemu",
+            vmid,
+            name: r.name || String(vmid),
+            status: r.status,
+            backupCount: list.length,
+            lastBackup: last
+              ? {
+                  node: last.node,
+                  storage: last.storage,
+                  volid: last.volid,
+                  size: last.size,
+                  ctime: last.ctime,
+                  format: last.format,
+                  notes: last.notes,
+                  vmid: last.vmid,
+                }
+              : null,
+          };
+        });
+
+      res.json({ guests });
     } catch (err) {
       sendError(res, err);
     }

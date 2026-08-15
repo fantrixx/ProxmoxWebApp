@@ -2,7 +2,7 @@
 
 **A focused web UI for Proxmox VE** — manage containers and VMs from any browser, including your phone.
 
-[![Version](https://img.shields.io/badge/version-1.3.17-orange?style=flat-square)](./package.json)
+[![Version](https://img.shields.io/badge/version-1.3.18-orange?style=flat-square)](./package.json)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square)](https://nodejs.org/)
 [![Proxmox](https://img.shields.io/badge/Proxmox%20VE-API-E57000?style=flat-square)](https://www.proxmox.com/)
 
@@ -73,6 +73,7 @@ The UI also checks GitHub for newer versions and shows an update banner on login
 - IP overview with quick copy
 
 ### Backups & jobs
+- Cluster-wide backup overview (last backup per guest: when, format, size, location)
 - Start backups from any guest card with storage, mode, and compression options
 - Past backups per guest, filtered by storage
 - Active job progress under the header (multi-job aware)
@@ -96,7 +97,7 @@ The UI also checks GitHub for newer versions and shows an update banner on login
 
 ## Versioning
 
-App version comes from `package.json` (currently **1.3.17**). It appears on the login screen and in the signed-in UI. On load, ProxPanel compares against GitHub and can show an update banner.
+App version comes from `package.json` (currently **1.3.18**). It appears on the login screen and in the signed-in UI. On load, ProxPanel compares against GitHub and can show an update banner.
 
 ---
 
