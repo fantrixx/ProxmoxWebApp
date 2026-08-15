@@ -393,6 +393,121 @@ find_proxpanel_cts() {
   done < <(pct list | awk 'NR>1 {print $1, $2, $NF}')
 }
 
+# Write status for the in-app updater (best-effort; never abort the update on I/O errors).
+write_update_status() {
+  local state="$1"
+  local previous_commit="${2:-}"
+  local error="${3:-}"
+  local dir="/tmp/proxpanel-update"
+  mkdir -p "$dir" 2>/dev/null || true
+  local now
+  now="$(date +%s%3N 2>/dev/null || node -e 'process.stdout.write(String(Date.now()))' 2>/dev/null || echo 0)"
+  node -e "
+const fs = require('fs');
+const dir = process.argv[1];
+const state = process.argv[2];
+const previousCommit = process.argv[3] || null;
+const error = process.argv[4] || undefined;
+const finishedAt = Number(process.argv[5]) || Date.now();
+const path = dir + '/status.json';
+let prev = {};
+try { prev = JSON.parse(fs.readFileSync(path, 'utf8')); } catch {}
+const out = {
+  state,
+  startedAt: prev.startedAt || finishedAt,
+  finishedAt,
+  triggeredBy: prev.triggeredBy || null,
+  previousCommit: previousCommit || prev.previousCommit || null,
+  rolledBack: state === 'rolled_back',
+  logPath: dir + '/update.log',
+};
+if (error) out.error = error;
+fs.writeFileSync(path, JSON.stringify(out) + '\n');
+" "$dir" "$state" "$previous_commit" "$error" "$now" 2>/dev/null || true
+}
+
+# Restore git work tree to a previously saved commit (tag / bundle / fetch).
+restore_previous_commit() {
+  local prev="$1"
+  local branch="$2"
+  local bundle="/tmp/proxpanel-update/pre-update.bundle"
+
+  if git cat-file -e "${prev}^{commit}" 2>/dev/null; then
+    git reset --hard "$prev"
+  elif [[ -f "$bundle" ]] && git bundle verify "$bundle" >/dev/null 2>&1; then
+    git fetch "$bundle" HEAD >/dev/null 2>&1 || true
+    git reset --hard "$prev"
+  elif git rev-parse -q --verify refs/tags/proxpanel-last-good >/dev/null 2>&1; then
+    git reset --hard proxpanel-last-good
+  else
+    git fetch --depth 1 origin "$prev"
+    git reset --hard "$prev"
+  fi
+  git checkout -f -B "$branch" HEAD >/dev/null 2>&1 || true
+  git clean -fd -e .env -e node_modules -e dist >/dev/null 2>&1 || true
+}
+
+# On failure after moving off the last-good commit: restore code, deps, build, service.
+rollback_inside_ct() {
+  local prev="$1"
+  local branch="$2"
+  local reason="$3"
+  local rollback_dir="/tmp/proxpanel-update"
+
+  msg_warn "Update failed (${reason}). Rolling back to ${prev:0:7} …"
+  write_update_status running "$prev" "Rolling back: ${reason}"
+
+  cd "$APP_DIR"
+  if ! restore_previous_commit "$prev" "$branch"; then
+    msg_error "Rollback failed: could not restore commit ${prev:0:7}."
+    write_update_status failed "$prev" "Update failed (${reason}); rollback could not restore ${prev:0:7}."
+    return 1
+  fi
+  msg_ok "Restored commit $(git log -1 --pretty=format:'%h %s' 2>/dev/null || echo "$prev")"
+
+  msg_info "Reinstalling dependencies for the previous version …"
+  if ! npm install; then
+    msg_error "Rollback npm install failed."
+    write_update_status failed "$prev" "Update failed (${reason}); rollback npm install failed."
+    return 1
+  fi
+
+  if [[ -d "$rollback_dir/dist-backup" ]]; then
+    rm -rf dist
+    cp -a "$rollback_dir/dist-backup" dist
+    msg_ok "Restored previous build (dist)"
+  else
+    msg_info "Rebuilding previous version …"
+    if ! npm run build; then
+      msg_error "Rollback build failed."
+      write_update_status failed "$prev" "Update failed (${reason}); rollback build failed."
+      return 1
+    fi
+  fi
+
+  install_update_command
+  systemctl daemon-reload >/dev/null 2>&1 || true
+  systemctl restart proxpanel
+  sleep 1
+  if systemctl is-active --quiet proxpanel; then
+    msg_ok "Rollback complete — still on ${prev:0:7}. Service is running."
+    write_update_status rolled_back "$prev" "Update failed (${reason}); restored previous version ${prev:0:7}."
+    return 0
+  fi
+
+  # Last resort: rebuild even if we restored dist.
+  msg_warn "Service inactive after rollback — rebuilding …"
+  if npm run build && systemctl restart proxpanel && sleep 1 && systemctl is-active --quiet proxpanel; then
+    msg_ok "Rollback complete after rebuild — still on ${prev:0:7}."
+    write_update_status rolled_back "$prev" "Update failed (${reason}); restored previous version ${prev:0:7}."
+    return 0
+  fi
+
+  msg_error "Rollback could not start the service. Logs: journalctl -u proxpanel -e"
+  write_update_status failed "$prev" "Update failed (${reason}); rollback could not start the service."
+  return 1
+}
+
 update_inside_ct() {
   header_info
   need_root
@@ -402,15 +517,55 @@ update_inside_ct() {
   fi
 
   local branch="${REPO_BRANCH:-main}"
-  msg_info "Fetching latest code from GitHub (${branch}) …"
+  local rollback_dir="/tmp/proxpanel-update"
+  local prev_commit=""
+  local advanced=0
+
+  mkdir -p "$rollback_dir"
   cd "$APP_DIR"
+
+  # Snapshot the last working version before we move HEAD (shallow clones need a bundle).
+  if [[ -d .git ]]; then
+    prev_commit="$(git rev-parse HEAD 2>/dev/null || true)"
+    if [[ -n "$prev_commit" ]]; then
+      git tag -f proxpanel-last-good "$prev_commit" >/dev/null 2>&1 || true
+      git bundle create "$rollback_dir/pre-update.bundle" HEAD >/dev/null 2>&1 || true
+      printf '%s\n' "$prev_commit" >"$rollback_dir/previous-commit"
+      msg_info "Saved rollback point ${prev_commit:0:7}"
+    fi
+  fi
+
+  rm -rf "$rollback_dir/dist-backup"
+  if [[ -d dist ]]; then
+    cp -a dist "$rollback_dir/dist-backup"
+  fi
+
+  # Allow explicit handling / rollback instead of aborting via ERR trap.
+  set +e
+  trap - ERR
+
+  msg_info "Fetching latest code from GitHub (${branch}) …"
   if [[ -d .git ]]; then
     git remote set-url origin "$REPO_URL" >/dev/null 2>&1 || true
     # Drop local edits (e.g. package-lock from npm) so the update always matches GitHub.
     # Keep .env — never delete it.
-    git fetch --depth 1 origin "$branch"
-    git checkout -f -B "$branch" "origin/$branch"
-    git reset --hard "origin/$branch"
+    if ! git fetch --depth 1 origin "$branch"; then
+      msg_error "git fetch failed. Previous version left unchanged."
+      write_update_status failed "$prev_commit" "git fetch failed. Previous version left unchanged."
+      exit 1
+    fi
+    if ! git checkout -f -B "$branch" "origin/$branch" || ! git reset --hard "origin/$branch"; then
+      msg_error "Could not check out origin/${branch}."
+      if [[ -n "$prev_commit" ]]; then
+        if rollback_inside_ct "$prev_commit" "$branch" "checkout failed"; then
+          exit 2
+        fi
+        exit 1
+      fi
+      write_update_status failed "" "Could not check out origin/${branch}."
+      exit 1
+    fi
+    advanced=1
     git clean -fd -e .env -e node_modules -e dist
     msg_ok "Current commit: $(git log -1 --pretty=format:'%h %s')"
   else
@@ -418,8 +573,28 @@ update_inside_ct() {
   fi
 
   msg_info "Installing dependencies and building the app …"
-  npm install
-  npm run build
+  if ! npm install; then
+    if [[ "$advanced" -eq 1 && -n "$prev_commit" ]]; then
+      if rollback_inside_ct "$prev_commit" "$branch" "npm install failed"; then
+        exit 2
+      fi
+      exit 1
+    fi
+    msg_error "npm install failed."
+    write_update_status failed "$prev_commit" "npm install failed."
+    exit 1
+  fi
+  if ! npm run build; then
+    if [[ "$advanced" -eq 1 && -n "$prev_commit" ]]; then
+      if rollback_inside_ct "$prev_commit" "$branch" "build failed"; then
+        exit 2
+      fi
+      exit 1
+    fi
+    msg_error "Build failed."
+    write_update_status failed "$prev_commit" "Build failed."
+    exit 1
+  fi
   msg_ok "Build complete"
 
   install_update_command
@@ -427,14 +602,26 @@ update_inside_ct() {
   systemctl restart proxpanel
   sleep 1
   if systemctl is-active --quiet proxpanel; then
+    # Refresh last-good marker only after a healthy restart on the new version.
+    if [[ -d .git ]]; then
+      git tag -f proxpanel-last-good HEAD >/dev/null 2>&1 || true
+    fi
+    write_update_status success "$(git rev-parse HEAD 2>/dev/null || true)" ""
     msg_ok "Update complete. http://$(hostname -I | awk '{print $1}'):${APP_PORT}"
     echo
     echo -e "${TAB}${INFO}  Next update: ${GN}proxpanel-update${CL}"
-  else
-    msg_error "Service proxpanel is not active. Logs: journalctl -u proxpanel -e"
+    exit 0
+  fi
+
+  msg_error "Service proxpanel is not active after update."
+  if [[ "$advanced" -eq 1 && -n "$prev_commit" ]]; then
+    if rollback_inside_ct "$prev_commit" "$branch" "service failed to start"; then
+      exit 2
+    fi
     exit 1
   fi
-  exit 0
+  write_update_status failed "$prev_commit" "Service proxpanel is not active. Logs: journalctl -u proxpanel -e"
+  exit 1
 }
 
 update_from_pve_host() {

@@ -92,7 +92,7 @@ app.get("/api/version", async (req, res) => {
   }
 });
 
-app.get("/api/update", requireSession, async (_req, res) => {
+app.get("/api/update", async (_req, res) => {
   try {
     const status = await getUpdateStatus();
     const log = await updateLogTail();

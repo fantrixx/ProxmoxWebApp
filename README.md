@@ -39,6 +39,8 @@ DEFAULTS=yes bash -c "$(wget -qLO - https://raw.githubusercontent.com/fantrixx/P
 
 Keeps your `.env` and restarts the service after pulling the latest release from GitHub.
 
+If install, build, or service restart fails after the code has already moved forward, the updater **rolls back** to the previous working commit (saved tag + git bundle), restores the previous `dist` when possible, and restarts the service again.
+
 **Inside the container** (`pct enter <CTID>` or SSH):
 
 ```bash
@@ -57,7 +59,7 @@ If `proxpanel-update` is missing on an older install, run the helper script once
 bash -c "$(wget -qLO - https://raw.githubusercontent.com/fantrixx/ProxmoxWebApp/main/ct/proxpanel.sh)"
 ```
 
-The UI also checks GitHub for newer versions and shows an update banner on login and overview pages. When signed in, use **Update now** on the banner to run the same update from the UI (pull, rebuild, restart).
+The UI also checks GitHub for newer versions and shows an update banner on login and overview pages. When signed in, use **Update now** on the banner to run the same update from the UI (pull, rebuild, restart, with automatic rollback on failure).
 
 ---
 

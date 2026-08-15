@@ -36,10 +36,12 @@ export type AppVersionInfo = {
 };
 
 export type UpdateStatus = {
-  state: "idle" | "starting" | "running" | "success" | "failed";
+  state: "idle" | "starting" | "running" | "success" | "rolled_back" | "failed";
   startedAt: number | null;
   finishedAt: number | null;
   triggeredBy: string | null;
+  previousCommit?: string | null;
+  rolledBack?: boolean;
   error?: string;
   logPath: string;
   canUpdate: boolean;

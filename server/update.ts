@@ -18,13 +18,21 @@ const LOG_PATH = path.join(UPDATE_DIR, "update.log");
 const WRAPPER_PATH = path.join(UPDATE_DIR, "run.sh");
 const STALE_MS = 30 * 60 * 1000;
 
-export type UpdateState = "idle" | "starting" | "running" | "success" | "failed";
+export type UpdateState =
+  | "idle"
+  | "starting"
+  | "running"
+  | "success"
+  | "rolled_back"
+  | "failed";
 
 export type UpdateStatus = {
   state: UpdateState;
   startedAt: number | null;
   finishedAt: number | null;
   triggeredBy: string | null;
+  previousCommit?: string | null;
+  rolledBack?: boolean;
   error?: string;
   logPath: string;
   canUpdate: boolean;
@@ -66,6 +74,9 @@ async function readStatusFile(): Promise<UpdateStatus | null> {
       startedAt: typeof parsed.startedAt === "number" ? parsed.startedAt : null,
       finishedAt: typeof parsed.finishedAt === "number" ? parsed.finishedAt : null,
       triggeredBy: typeof parsed.triggeredBy === "string" ? parsed.triggeredBy : null,
+      previousCommit:
+        typeof parsed.previousCommit === "string" ? parsed.previousCommit : null,
+      rolledBack: Boolean(parsed.rolledBack) || parsed.state === "rolled_back",
       error: typeof parsed.error === "string" ? parsed.error : undefined,
       logPath: typeof parsed.logPath === "string" ? parsed.logPath : LOG_PATH,
       canUpdate: canLaunchUpdate(),
@@ -83,6 +94,8 @@ async function writeStatus(
     startedAt: status.startedAt,
     finishedAt: status.finishedAt,
     triggeredBy: status.triggeredBy,
+    previousCommit: status.previousCommit ?? null,
+    rolledBack: Boolean(status.rolledBack) || status.state === "rolled_back",
     error: status.error,
     logPath: status.logPath ?? LOG_PATH,
     canUpdate: canLaunchUpdate(),
@@ -131,9 +144,19 @@ code=$?
 set -e
 
 now="$(date +%s%3N 2>/dev/null || node -e 'process.stdout.write(String(Date.now()))')"
+
+# Prefer the terminal status written by proxpanel.sh (includes rollback details).
+if node -e "const fs=require('fs');try{const s=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));process.exit(['success','failed','rolled_back'].includes(s.state)?0:1)}catch{process.exit(1)}" "$STATUS"; then
+  exit "$code"
+fi
+
 if [[ "$code" -eq 0 ]]; then
   node -e "const fs=require('fs');fs.writeFileSync(process.argv[1], JSON.stringify({state:'success',startedAt:Number(process.argv[2]),finishedAt:Number(process.argv[3]),triggeredBy:process.argv[4],logPath:process.argv[5]})+'\\n')" \\
     "$STATUS" "$STARTED_AT" "$now" "$WHO" "$LOG"
+elif [[ "$code" -eq 2 ]]; then
+  node -e "const fs=require('fs');fs.writeFileSync(process.argv[1], JSON.stringify({state:'rolled_back',startedAt:Number(process.argv[2]),finishedAt:Number(process.argv[3]),triggeredBy:process.argv[4],rolledBack:true,error:process.argv[5],logPath:process.argv[6]})+'\\n')" \\
+    "$STATUS" "$STARTED_AT" "$now" "$WHO" "Update failed; restored the previous working version." "$LOG"
+  exit 2
 else
   node -e "const fs=require('fs');fs.writeFileSync(process.argv[1], JSON.stringify({state:'failed',startedAt:Number(process.argv[2]),finishedAt:Number(process.argv[3]),triggeredBy:process.argv[4],error:process.argv[5],logPath:process.argv[6]})+'\\n')" \\
     "$STATUS" "$STARTED_AT" "$now" "$WHO" "Update exited with code $code. See $LOG" "$LOG"
