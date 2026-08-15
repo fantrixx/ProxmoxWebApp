@@ -51,15 +51,4 @@ export function deleteSession(id: string | undefined): void {
   if (id) sessions.delete(id);
 }
 
-export function getAnySession(): Session | undefined {
-  for (const [id, session] of sessions) {
-    if (Date.now() - session.createdAt > TTL_MS) {
-      sessions.delete(id);
-      continue;
-    }
-    return session;
-  }
-  return undefined;
-}
-
 export const COOKIE_NAME = "proxpanel_sid";

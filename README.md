@@ -2,7 +2,7 @@
 
 **A focused web UI for Proxmox VE** — manage containers and VMs from any browser, including your phone.
 
-[![Version](https://img.shields.io/badge/version-1.3.26-orange?style=flat-square)](./package.json)
+[![Version](https://img.shields.io/badge/version-1.3.27-orange?style=flat-square)](./package.json)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square)](https://nodejs.org/)
 [![Proxmox](https://img.shields.io/badge/Proxmox%20VE-API-E57000?style=flat-square)](https://www.proxmox.com/)
 
@@ -84,7 +84,7 @@ The UI also checks GitHub for newer versions and shows an update banner on login
 - Backup schedules support storage, mode (snapshot recommended), and compression
 - Create, edit, pause, and delete from a dedicated dialog
 - Scrollable schedule list with last-run time
-- Survives reboot when you use an API token in `.env`
+- Survives reboot when you configure an API token in `.env` (required for schedules to run)
 
 ### More
 - Snapshots and resource tuning
@@ -97,7 +97,7 @@ The UI also checks GitHub for newer versions and shows an update banner on login
 
 ## Versioning
 
-App version comes from `package.json` (currently **1.3.26**). It appears on the login screen and in the signed-in UI. On load, ProxPanel compares against GitHub and can show an update banner.
+App version comes from `package.json` (currently **1.3.27**). It appears on the login screen and in the signed-in UI. On load, ProxPanel compares against GitHub and can show an update banner.
 
 ---
 
@@ -139,7 +139,7 @@ PROXMOX_TOKEN_SECRET=...
 
 Create an API token in Proxmox: **Datacenter → Permissions → API Tokens**. The token needs access on `/` (e.g. Administrator, or a role with at least `VM.Audit`, `VM.PowerMgmt`, `VM.Console`, plus backup-related privileges if you use backups).
 
-> **Schedules:** ProxPanel must keep running, and an API token is recommended so power schedules still work after a reboot without an interactive login.
+> **Schedules:** ProxPanel must keep running, and an API token in `.env` (`PROXMOX_URL`, `PROXMOX_TOKEN_ID`, `PROXMOX_TOKEN_SECRET`) is **required** for schedules to run. Interactive browser sessions are not used for automation.
 
 ---
 

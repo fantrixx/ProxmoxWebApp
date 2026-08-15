@@ -332,7 +332,10 @@ export const dataApi = {
       body: fd,
     });
   },
-  schedules: () => api<{ schedules: PowerSchedule[] }>("/api/schedules"),
+  schedules: () =>
+    api<{ schedules: PowerSchedule[]; automationReady: boolean }>(
+      "/api/schedules",
+    ),
   saveSchedule: (schedule: PowerSchedule) =>
     api<{ schedule: PowerSchedule }>("/api/schedules", {
       method: "PUT",

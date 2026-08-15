@@ -103,6 +103,23 @@ export function ScheduleEmptyState({ onAdd }: { onAdd: () => void }) {
   );
 }
 
+/** Shown when .env API token is missing — schedules can be saved but will not run. */
+export function ScheduleAutomationBanner({ ready }: { ready: boolean | undefined }) {
+  if (ready !== false) return null;
+  return (
+    <div
+      role="status"
+      className="rounded-xl border border-warn/40 bg-warn/10 px-3 py-2.5 text-xs leading-relaxed text-warn"
+    >
+      Schedules will not run until you set <code className="text-[11px]">PROXMOX_URL</code>,{" "}
+      <code className="text-[11px]">PROXMOX_TOKEN_ID</code>, and{" "}
+      <code className="text-[11px]">PROXMOX_TOKEN_SECRET</code> in{" "}
+      <code className="text-[11px]">.env</code> and restart ProxPanel. Browser logins are not
+      used for automation.
+    </div>
+  );
+}
+
 export function ScheduleRow({
   schedule,
   busy,

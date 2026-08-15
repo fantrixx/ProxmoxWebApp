@@ -197,10 +197,30 @@ async function runBackupAction(session: Session, schedule: PowerSchedule): Promi
   console.info("[schedules] vzdump started", { node, vmid, upid });
 }
 
+/** Schedules only run with a configured .env API token (no interactive session fallback). */
+export function isScheduleAutomationReady(): boolean {
+  return Boolean(
+    process.env.PROXMOX_TOKEN_ID?.trim() &&
+      process.env.PROXMOX_TOKEN_SECRET?.trim() &&
+      process.env.PROXMOX_URL?.trim(),
+  );
+}
+
 export function startScheduleRunner(getSession: () => Session | null): void {
+  let warnedNoToken = false;
+
   const tick = async () => {
     const session = getSession();
-    if (!session) return;
+    if (!session) {
+      if (!warnedNoToken && (await readAll()).some((s) => s.enabled)) {
+        console.warn(
+          "[schedules] Enabled schedules exist, but PROXMOX_URL / PROXMOX_TOKEN_ID / PROXMOX_TOKEN_SECRET are not set — schedules will not run.",
+        );
+        warnedNoToken = true;
+      }
+      return;
+    }
+    warnedNoToken = false;
 
     const now = new Date();
     const schedules = await readAll();

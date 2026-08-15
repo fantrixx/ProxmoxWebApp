@@ -4,6 +4,7 @@ import { Plus, X } from "lucide-react";
 import { dataApi } from "../api";
 import { ConfirmDialog } from "./ConfirmDialog";
 import {
+  ScheduleAutomationBanner,
   ScheduleEmptyState,
   ScheduleRow,
   lastRunLabel,
@@ -195,26 +196,29 @@ export function ScheduleDialog({
         <div className="flex min-h-0 flex-1 flex-col px-5 py-4">
           {mode === "list" ? (
             <>
-              {guestSchedules.length > 0 ? (
-                <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
-                  <p className="text-xs text-muted">
-                    {activeCount} active
-                    {guestSchedules.length !== activeCount
-                      ? ` · ${guestSchedules.length} total`
-                      : guestSchedules.length === 1
-                        ? " schedule"
-                        : " schedules"}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={openCreate}
-                    className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-black hover:bg-accent-2 sm:min-h-0"
-                  >
-                    <Plus className="size-3.5" />
-                    Add
-                  </button>
-                </div>
-              ) : null}
+              <div className="mb-3 shrink-0 space-y-3">
+                <ScheduleAutomationBanner ready={list.data?.automationReady} />
+                {guestSchedules.length > 0 ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs text-muted">
+                      {activeCount} active
+                      {guestSchedules.length !== activeCount
+                        ? ` · ${guestSchedules.length} total`
+                        : guestSchedules.length === 1
+                          ? " schedule"
+                          : " schedules"}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={openCreate}
+                      className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-black hover:bg-accent-2 sm:min-h-0"
+                    >
+                      <Plus className="size-3.5" />
+                      Add
+                    </button>
+                  </div>
+                ) : null}
+              </div>
 
               {list.isError ? (
                 <p className="text-sm text-bad">{(list.error as Error).message}</p>
@@ -238,9 +242,9 @@ export function ScheduleDialog({
               )}
 
               <p className="mt-3 shrink-0 text-[11px] leading-relaxed text-muted">
-                ProxPanel must keep running. Use an API token in <code>.env</code> so
-                schedules survive reboot. Backup schedules need VM.Backup and storage
-                space permissions.
+                ProxPanel must keep running. An API token in <code>.env</code> is required
+                for schedules to run. Backup schedules need VM.Backup and storage space
+                permissions.
               </p>
             </>
           ) : (

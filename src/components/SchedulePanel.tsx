@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { dataApi } from "../api";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { ScheduleEmptyState, ScheduleRow, sortSchedules } from "./ScheduleList";
+import { ScheduleAutomationBanner, ScheduleEmptyState, ScheduleRow, sortSchedules } from "./ScheduleList";
 import {
   ScheduleFormFields,
   buildSchedulePayload,
@@ -151,10 +151,16 @@ export function SchedulePanel({
       </div>
 
       <p className="mb-4 text-xs text-muted">
-        Requires ProxPanel to keep running. Prefer an API token in <code>.env</code> for
-        schedules after reboot. Backup schedules need VM.Backup and storage space
+        Requires ProxPanel to keep running and an API token in <code>.env</code>{" "}
+        so schedules can execute. Backup schedules need VM.Backup and storage space
         permissions.
       </p>
+
+      {list.data?.automationReady === false ? (
+        <div className="mb-4">
+          <ScheduleAutomationBanner ready={false} />
+        </div>
+      ) : null}
 
       {list.isError ? (
         <p className="text-sm text-bad">{(list.error as Error).message}</p>

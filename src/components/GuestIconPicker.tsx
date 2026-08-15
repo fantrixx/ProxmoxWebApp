@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { ImagePlus, Search, Sparkles, Upload, X } from "lucide-react";
 import {
   listServiceCatalog,
@@ -111,6 +117,9 @@ export function GuestIconPicker({
   const [q, setQ] = useState("");
   const [inputEl, setInputEl] = useState<HTMLInputElement | null>(null);
   const [saving, setSaving] = useState(false);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const wasOpen = useRef(false);
 
   const detected = useMemo(() => resolveServiceIcon(name, tags), [name, tags]);
   const suggestions = useMemo(
@@ -133,16 +142,24 @@ export function GuestIconPicker({
     });
   }, [q]);
 
+  // Reset UI only when the dialog opens — not when parent re-renders
+  // (inline onClose / query updates used to kick us back to Auto mid-search).
+  useEffect(() => {
+    if (open && !wasOpen.current) {
+      setTab("choose");
+      setQ("");
+    }
+    wasOpen.current = open;
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
-    setTab("choose");
-    setQ("");
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onCloseRef.current();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

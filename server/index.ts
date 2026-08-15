@@ -25,13 +25,18 @@ import {
   COOKIE_NAME,
   createSession,
   deleteSession,
-  getAnySession,
   getSession,
   type Session,
 } from "./session.ts";
-import { startScheduleRunner } from "./schedules.ts";
+import { isScheduleAutomationReady, startScheduleRunner } from "./schedules.ts";
 import { getAppVersion } from "./version.ts";
 import { getUpdateStatus, startAppUpdate, updateLogTail } from "./update.ts";
+import {
+  assertLoginAllowed,
+  clearLoginFailures,
+  clientIp,
+  recordLoginFailure,
+} from "./login-rate-limit.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isProd = process.env.NODE_ENV === "production";
@@ -129,6 +134,16 @@ app.get("/api/auth/defaults", (_req, res) => {
 });
 
 app.post("/api/auth/login", async (req, res) => {
+  const ip = clientIp(req);
+  const limited = assertLoginAllowed(ip);
+  if (!limited.ok) {
+    res.setHeader("Retry-After", String(limited.retryAfterSec));
+    res.status(429).json({
+      error: `Too many login attempts. Try again in ${limited.retryAfterSec}s.`,
+    });
+    return;
+  }
+
   try {
     const {
       host,
@@ -156,6 +171,7 @@ app.post("/api/auth/login", async (req, res) => {
       const secret = process.env.PROXMOX_TOKEN_SECRET;
       const envHost = process.env.PROXMOX_URL;
       if (!tokenId || !secret || !envHost) {
+        recordLoginFailure(ip);
         res.status(400).json({
           error:
             "API token is not configured in .env (PROXMOX_URL, PROXMOX_TOKEN_ID, PROXMOX_TOKEN_SECRET).",
@@ -175,12 +191,14 @@ app.post("/api/auth/login", async (req, res) => {
         rejectUnauthorized: tlsReject,
         auth: { kind: "token", tokenId, secret },
       });
+      clearLoginFailures(ip);
       res.cookie(COOKIE_NAME, session.id, cookieOptions());
       res.json({ username: tokenId, host: normalized });
       return;
     }
 
     if (!host || !username || !password) {
+      recordLoginFailure(ip);
       res.status(400).json({ error: "Server, username, and password are required." });
       return;
     }
@@ -201,9 +219,11 @@ app.post("/api/auth/login", async (req, res) => {
       auth: { kind: "ticket", ticket: login.ticket, csrf: login.csrf },
     });
 
+    clearLoginFailures(ip);
     res.cookie(COOKIE_NAME, session.id, cookieOptions());
     res.json({ username: login.username, host: normalized });
   } catch (err) {
+    recordLoginFailure(ip);
     sendError(res, err);
   }
 });
@@ -657,22 +677,21 @@ function sendError(res: express.Response, err: unknown) {
   res.status(500).json({ error: message + tlsHint });
 }
 
+/** Background schedules use only the .env API token — never a browser session. */
 function automationSession(): Session | null {
-  const tokenId = process.env.PROXMOX_TOKEN_ID;
-  const secret = process.env.PROXMOX_TOKEN_SECRET;
-  const envHost = process.env.PROXMOX_URL;
-  if (tokenId && secret && envHost) {
-    const insecureEnv = process.env.PROXMOX_INSECURE_TLS !== "false";
-    return {
-      id: "__automation__",
-      host: normalizeHost(envHost),
-      username: tokenId,
-      rejectUnauthorized: !insecureEnv,
-      auth: { kind: "token", tokenId, secret },
-      createdAt: Date.now(),
-    };
-  }
-  return getAnySession() ?? null;
+  if (!isScheduleAutomationReady()) return null;
+  const tokenId = process.env.PROXMOX_TOKEN_ID!;
+  const secret = process.env.PROXMOX_TOKEN_SECRET!;
+  const envHost = process.env.PROXMOX_URL!;
+  const insecureEnv = process.env.PROXMOX_INSECURE_TLS !== "false";
+  return {
+    id: "__automation__",
+    host: normalizeHost(envHost),
+    username: tokenId,
+    rejectUnauthorized: !insecureEnv,
+    auth: { kind: "token", tokenId, secret },
+    createdAt: Date.now(),
+  };
 }
 
 registerFeatureRoutes(app, {

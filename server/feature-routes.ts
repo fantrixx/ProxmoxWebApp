@@ -17,6 +17,7 @@ import {
 import {
   deleteSchedule,
   isScheduleAction,
+  isScheduleAutomationReady,
   listSchedules,
   normalizeBackupFields,
   upsertSchedule,
@@ -1496,7 +1497,10 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
   app.get("/api/schedules", requireSession, async (_req, res) => {
     try {
       const schedules = await listSchedules();
-      res.json({ schedules });
+      res.json({
+        schedules,
+        automationReady: isScheduleAutomationReady(),
+      });
     } catch (err) {
       sendError(res, err);
     }
