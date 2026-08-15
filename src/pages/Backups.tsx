@@ -8,6 +8,8 @@ import { BackupDialog } from "../components/BackupDialog";
 import { GuestTypeIcon } from "../components/GuestTypeIcon";
 import { StatusBadge } from "../components/StatusBadge";
 import { formatBytes, formatSnapTime, guestLabel } from "../format";
+import { useApp } from "../context";
+import { resolveQuickBackup } from "../quickBackup";
 import type { BackupOverviewGuest, GuestType, MediaItem } from "../types";
 
 type KindFilter = "all" | GuestType;
@@ -28,6 +30,7 @@ function formatLabel(item: MediaItem | null | undefined): string {
 
 export default function BackupsPage() {
   const qc = useQueryClient();
+  const { startGuestBackup, toast } = useApp();
   const [kind, setKind] = useState<KindFilter>("all");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [qtext, setQtext] = useState("");
@@ -64,9 +67,28 @@ export default function BackupsPage() {
     (g) => g.enabledBackupScheduleCount > 0,
   ).length;
 
-  function openBackupNow(guest: BackupOverviewGuest) {
+  async function openBackupNow(guest: BackupOverviewGuest) {
     setSelected(null);
-    setBackupTarget(guest);
+    try {
+      const resolved = await resolveQuickBackup(
+        guest.node,
+        guest.type,
+        String(guest.vmid),
+      );
+      if (!resolved) {
+        setBackupTarget(guest);
+        return;
+      }
+      await startGuestBackup({
+        ...resolved,
+        name: guest.name,
+      });
+      void qc.invalidateQueries({ queryKey: ["backupsOverview"] });
+      void qc.invalidateQueries({ queryKey: ["guestBackups"] });
+    } catch {
+      toast("err", "Could not start backup — opening options…");
+      setBackupTarget(guest);
+    }
   }
 
   function closeBackupDialog() {
@@ -86,18 +108,18 @@ export default function BackupsPage() {
         }
       />
 
-      <div className="max-w-full px-4 py-4 md:px-8 md:py-6">
-        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="max-w-full px-4 py-3 md:px-8 md:py-6">
+        <div className="mb-3 flex flex-col gap-2 lg:mb-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative w-full min-w-0 lg:max-w-xs">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted" />
             <input
               value={qtext}
               onChange={(e) => setQtext(e.target.value)}
               placeholder="Search name, VMID, node…"
-              className="w-full min-w-0 rounded-xl border border-line bg-surface py-2.5 pr-3 pl-9 text-base outline-none focus:border-accent md:text-sm"
+              className="w-full min-w-0 rounded-lg border border-line bg-surface py-1.5 pr-2 pl-8 text-sm outline-none focus:border-accent md:rounded-xl md:py-2 md:pl-9"
             />
           </div>
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
             <KindChip active={kind === "all"} onClick={() => setKind("all")}>
               All
             </KindChip>
@@ -110,11 +132,11 @@ export default function BackupsPage() {
             <button
               type="button"
               onClick={() => setSortDir((d) => (d === "desc" ? "asc" : "desc"))}
-              className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 text-xs text-muted hover:bg-surface-2 hover:text-ink sm:min-h-0 sm:py-1.5"
+              className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] text-muted hover:bg-surface-2 hover:text-ink md:rounded-lg md:px-2.5 md:text-xs"
               title="Sort by last backup date"
             >
               <ArrowDownUp className="size-3.5" />
-              {sortDir === "desc" ? "Newest first" : "Oldest first"}
+              {sortDir === "desc" ? "Newest" : "Oldest"}
             </button>
           </div>
         </div>
@@ -184,7 +206,7 @@ function BackupRow({
 }) {
   return (
     <li className="min-w-0">
-      <div className="flex min-w-0 flex-col gap-3 px-3 py-3 transition hover:bg-surface-2/50 lg:grid lg:grid-cols-[minmax(0,1.15fr)_3.5rem_6.5rem_minmax(0,0.9fr)_4rem_5rem_minmax(0,0.75fr)_7rem] lg:items-center lg:gap-3">
+      <div className="flex min-w-0 flex-col gap-2 px-3 py-2.5 transition hover:bg-surface-2/50 md:gap-3 md:py-3 lg:grid lg:grid-cols-[minmax(0,1.15fr)_3.5rem_6.5rem_minmax(0,0.9fr)_4rem_5rem_minmax(0,0.75fr)_7rem] lg:items-center lg:gap-3">
         <button
           type="button"
           onClick={onOpenDetails}
@@ -262,7 +284,7 @@ function BackupRow({
           <button
             type="button"
             onClick={onBackupNow}
-            className="inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-accent/40 bg-accent/10 px-3 text-xs font-medium text-accent hover:bg-accent/20 lg:min-h-0 lg:w-auto lg:py-1.5"
+            className="inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/20 lg:w-auto"
           >
             <HardDriveDownload className="size-3.5" />
             Backup now
@@ -286,7 +308,7 @@ function KindChip({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex min-h-11 cursor-pointer items-center rounded-lg border px-3 text-xs font-medium sm:min-h-0 sm:py-1.5 ${
+      className={`inline-flex cursor-pointer items-center rounded-md border px-2 py-1 text-[11px] font-medium md:rounded-lg md:px-2.5 md:text-xs ${
         active
           ? "border-accent bg-accent/15 text-accent"
           : "border-line text-muted hover:bg-surface-2"

@@ -1,10 +1,11 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
   CalendarClock,
+  Ellipsis,
   HardDriveDownload,
   Loader2,
   Play,
@@ -31,12 +32,14 @@ import { ServiceIcon } from "./ServiceIcon";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { BackupDialog } from "./BackupDialog";
 import { ScheduleDialog } from "./ScheduleDialog";
+import { GuestQuickSheet } from "./GuestQuickSheet";
 import { IpList } from "./IpList";
 import { useApp } from "../context";
 import { useGuestAction } from "../hooks";
 import { useGuestBackupProgress } from "../hooks/useGuestBackupProgress";
 import { POWER_CONFIRMS } from "../power";
 import { reconcilePendingGuestAction } from "../pendingGuest";
+import { resolveQuickBackup } from "../quickBackup";
 
 type PowerKind = keyof typeof POWER_CONFIRMS;
 
@@ -47,11 +50,16 @@ export function GuestCard({
   guest: ClusterResource;
   rates?: GuestRates;
 }) {
-  const { openConsole, toast } = useApp();
+  const { openConsole, toast, startGuestBackup } = useApp();
   const action = useGuestAction();
   const [confirm, setConfirm] = useState<PowerKind | null>(null);
   const [backupOpen, setBackupOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFired = useRef(false);
   const type = (guest.type === "qemu" ? "qemu" : "lxc") as GuestType;
   const pending = reconcilePendingGuestAction(
     guest.node,
@@ -76,6 +84,8 @@ export function GuestCard({
     visual === "migrating";
   const busy = action.isPending || transitioning;
   const backup = useGuestBackupProgress(guest.node, guest.vmid);
+  const backingUp = Boolean(backup?.running);
+  const backupFailed = Boolean(backup?.failed);
 
   function run(kind: string) {
     if (!guest.node || guest.vmid == null) return;
@@ -99,13 +109,61 @@ export function GuestCard({
     });
   }
 
+  async function quickBackup() {
+    if (!guest.node || guest.vmid == null || backupBusy || backingUp) return;
+    setBackupBusy(true);
+    setMenuOpen(false);
+    try {
+      const resolved = await resolveQuickBackup(
+        guest.node,
+        type,
+        String(guest.vmid),
+      );
+      if (!resolved) {
+        setBackupOpen(true);
+        return;
+      }
+      await startGuestBackup({
+        ...resolved,
+        name: guest.name,
+      });
+    } catch {
+      /* toasted */
+    } finally {
+      setBackupBusy(false);
+    }
+  }
+
+  function clearLongPress() {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }
+
+  function onCardPointerDown() {
+    longPressFired.current = false;
+    clearLongPress();
+    longPressTimer.current = setTimeout(() => {
+      longPressFired.current = true;
+      setMenuOpen(true);
+    }, 450);
+  }
+
+  function onCardPointerUp() {
+    clearLongPress();
+  }
+
   const meta = confirm ? POWER_CONFIRMS[confirm] : null;
-  const backingUp = Boolean(backup?.running);
-  const backupFailed = Boolean(backup?.failed);
 
   return (
     <article
-      className={`relative flex flex-col overflow-hidden rounded-2xl border bg-surface p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] ${
+      onContextMenu={(e) => e.preventDefault()}
+      onPointerDown={onCardPointerDown}
+      onPointerUp={onCardPointerUp}
+      onPointerLeave={onCardPointerUp}
+      onPointerCancel={onCardPointerUp}
+      className={`relative flex flex-col overflow-hidden rounded-2xl border bg-surface p-3 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] md:p-5 ${
         backupFailed
           ? "border-bad/50"
           : backingUp
@@ -185,12 +243,16 @@ export function GuestCard({
               </span>
             ) : null}
           </div>
-          <Link
-            to={`/guest/${type}/${guest.node}/${guest.vmid}`}
-            className="flex min-w-0 items-center gap-2 text-lg font-semibold tracking-tight hover:text-accent"
+          <button
+            type="button"
+            onClick={() => {
+              if (longPressFired.current) return;
+              setSheetOpen(true);
+            }}
+            className="flex min-w-0 items-center gap-2 text-left text-lg font-semibold tracking-tight hover:text-accent"
           >
             <span className="truncate">{guest.name || `Guest ${guest.vmid}`}</span>
-          </Link>
+          </button>
           <p className="mt-1 text-xs text-muted">
             Node {guest.node}
             {guest.maxcpu ? ` · ${guest.maxcpu} CPU` : ""}
@@ -263,7 +325,7 @@ export function GuestCard({
         </span>
       </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+      <div className="relative mt-5 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
         {running ? (
           <>
             <ActionBtn
@@ -298,17 +360,62 @@ export function GuestCard({
           node={guest.node}
           type={type}
           vmid={guest.vmid}
-          backingUp={backingUp}
+          backingUp={backingUp || backupBusy}
           progress={backup?.progress}
-          disabled={busy || backingUp || !guest.node || guest.vmid == null}
-          onClick={() => setBackupOpen(true)}
+          disabled={busy || backingUp || backupBusy || !guest.node || guest.vmid == null}
+          onClick={() => void quickBackup()}
         />
-        <ActionBtn
-          icon={<CalendarClock className="size-3.5" />}
-          label="Schedule"
-          disabled={busy || !guest.node || guest.vmid == null}
-          onClick={() => setScheduleOpen(true)}
-        />
+        <div className="relative">
+          <ActionBtn
+            icon={<Ellipsis className="size-3.5" />}
+            label="More"
+            disabled={busy || !guest.node || guest.vmid == null}
+            onClick={() => setMenuOpen((v) => !v)}
+          />
+          {menuOpen ? (
+            <>
+              <button
+                type="button"
+                className="fixed inset-0 z-20 cursor-default"
+                aria-label="Close menu"
+                onClick={() => setMenuOpen(false)}
+              />
+              <div className="absolute bottom-full right-0 z-30 mb-1 min-w-40 overflow-hidden rounded-xl border border-line bg-bg py-1 shadow-xl">
+                <MenuItem
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setScheduleOpen(true);
+                  }}
+                >
+                  <CalendarClock className="size-3.5" /> Schedule
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setBackupOpen(true);
+                  }}
+                >
+                  <HardDriveDownload className="size-3.5" /> Backup options…
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setSheetOpen(true);
+                  }}
+                >
+                  Quick view
+                </MenuItem>
+                <Link
+                  to={`/guest/${type}/${guest.node}/${guest.vmid}`}
+                  className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-surface-2"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  Full details
+                </Link>
+              </div>
+            </>
+          ) : null}
+        </div>
       </div>
 
       {meta && confirm ? (
@@ -344,7 +451,31 @@ export function GuestCard({
           name={guest.name}
         />
       ) : null}
+
+      <GuestQuickSheet
+        guest={guest}
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+      />
     </article>
+  );
+}
+
+function MenuItem({
+  children,
+  onClick,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface-2"
+    >
+      {children}
+    </button>
   );
 }
 
@@ -474,7 +605,7 @@ function ActionBtn({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-0 sm:w-auto sm:px-2.5 sm:py-1.5 ${primary ? "border-transparent" : ""} ${tone}`}
+      className={`inline-flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto sm:px-2.5 ${primary ? "border-transparent" : ""} ${tone}`}
     >
       {icon}
       {label}

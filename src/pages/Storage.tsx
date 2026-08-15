@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Search } from "lucide-react";
 import { Header } from "../components/Header";
 import { MetricBar } from "../components/MetricBar";
@@ -47,7 +48,8 @@ function statusTone(status?: string): string {
 
 export default function StoragePage() {
   const q = useResources();
-  const [qtext, setQtext] = useState("");
+  const [searchParams] = useSearchParams();
+  const [qtext, setQtext] = useState(() => searchParams.get("q") || "");
   const [nodeFilter, setNodeFilter] = useState<string>("all");
 
   const stores = useMemo(
@@ -102,18 +104,18 @@ export default function StoragePage() {
             : `${filtered.length} of ${stores.length} pools · ${formatBytes(totals.free)} free`
         }
       />
-      <div className="max-w-full space-y-4 px-4 py-4 md:px-8 md:py-6">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="max-w-full space-y-3 px-4 py-3 md:space-y-4 md:px-8 md:py-6">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative w-full min-w-0 lg:max-w-xs">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted" />
             <input
               value={qtext}
               onChange={(e) => setQtext(e.target.value)}
               placeholder="Search storage, node, type…"
-              className="w-full min-w-0 rounded-xl border border-line bg-surface py-2.5 pr-3 pl-9 text-base outline-none focus:border-accent md:text-sm"
+              className="w-full min-w-0 rounded-lg border border-line bg-surface py-1.5 pr-2 pl-8 text-sm outline-none focus:border-accent md:rounded-xl md:py-2 md:pl-9"
             />
           </div>
-          <div className="flex min-w-0 flex-wrap gap-2">
+          <div className="flex min-w-0 flex-wrap gap-1.5">
             <NodeChip
               active={nodeFilter === "all"}
               onClick={() => setNodeFilter("all")}
@@ -139,7 +141,7 @@ export default function StoragePage() {
         </div>
 
         {filtered.length > 0 ? (
-          <section className="grid gap-3 sm:grid-cols-3">
+          <section className="grid grid-cols-3 gap-2 md:gap-3">
             <StatCard label="Capacity" value={formatBytes(totals.total)} />
             <StatCard label="Used" value={formatBytes(totals.used)} />
             <StatCard label="Free" value={formatBytes(totals.free)} />
@@ -166,9 +168,11 @@ export default function StoragePage() {
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-line bg-surface px-4 py-3">
-      <div className="text-xs text-muted">{label}</div>
-      <div className="mt-1 font-mono text-lg font-semibold tracking-tight">{value}</div>
+    <div className="rounded-xl border border-line bg-surface px-2.5 py-2 md:rounded-2xl md:px-4 md:py-3">
+      <div className="text-[10px] text-muted md:text-xs">{label}</div>
+      <div className="mt-0.5 font-mono text-sm font-semibold tracking-tight md:mt-1 md:text-lg">
+        {value}
+      </div>
     </div>
   );
 }
@@ -186,7 +190,7 @@ function NodeChip({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex min-h-11 cursor-pointer items-center rounded-lg border px-3 text-xs font-medium sm:min-h-0 sm:py-1.5 ${
+      className={`inline-flex cursor-pointer items-center rounded-md border px-2 py-1 text-[11px] font-medium md:rounded-lg md:px-2.5 md:text-xs ${
         active
           ? "border-accent bg-accent/15 text-accent"
           : "border-line text-muted hover:bg-surface-2"
@@ -206,8 +210,8 @@ function StorageCard({ store }: { store: ClusterResource }) {
   const available = (store.status || "").toLowerCase() === "available";
 
   return (
-    <article className="min-w-0 overflow-hidden rounded-2xl border border-line bg-surface p-5">
-      <div className="mb-4 flex items-start justify-between gap-3">
+    <article className="min-w-0 overflow-hidden rounded-2xl border border-line bg-surface p-3 md:p-5">
+      <div className="mb-3 flex items-start justify-between gap-3 md:mb-4">
         <div className="min-w-0 overflow-hidden">
           <div className="truncate font-semibold">{store.storage || store.id}</div>
           <div className="mt-0.5 truncate text-xs text-muted">

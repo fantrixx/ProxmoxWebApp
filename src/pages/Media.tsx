@@ -7,6 +7,7 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { Header } from "../components/Header";
 import { useApp } from "../context";
 import { formatBytes, formatSnapTime } from "../format";
+import { loadUploadPrefs, saveUploadPrefs } from "../prefs";
 import type { IsoUsageEntry, MediaItem, MediaStorage } from "../types";
 
 type Tab = "isos" | "templates";
@@ -48,6 +49,7 @@ export default function MediaPage() {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [dragOver, setDragOver] = useState(false);
+  const [showDropZone, setShowDropZone] = useState(false);
 
   const [uploadTarget, setUploadTarget] = useState("");
   const [downloadOpen, setDownloadOpen] = useState(false);
@@ -153,16 +155,34 @@ export default function MediaPage() {
     setStorageFilter("all");
     setUploadTarget("");
     setDownloadTarget("");
+    setShowDropZone(false);
   }, [tab]);
 
   useEffect(() => {
+    const prefs = loadUploadPrefs();
+    const preferred =
+      tab === "isos" ? prefs.isoStorageKey : prefs.templateStorageKey;
+    if (
+      !uploadTarget &&
+      preferred &&
+      storageOptions.some((s) => storageKey(s) === preferred)
+    ) {
+      setUploadTarget(preferred);
+      return;
+    }
     if (!uploadTarget && storageOptions.length === 1) {
       setUploadTarget(storageKey(storageOptions[0]));
     }
     if (!downloadTarget && storageOptions.length === 1) {
       setDownloadTarget(storageKey(storageOptions[0]));
+    } else if (
+      !downloadTarget &&
+      preferred &&
+      storageOptions.some((s) => storageKey(s) === preferred)
+    ) {
+      setDownloadTarget(preferred);
     }
-  }, [storageOptions, uploadTarget, downloadTarget]);
+  }, [storageOptions, uploadTarget, downloadTarget, tab]);
 
   useEffect(() => {
     if (!catalogOpen) return;
@@ -231,6 +251,13 @@ export default function MediaPage() {
       });
     },
     onSuccess: () => {
+      if (uploadTarget) {
+        saveUploadPrefs(
+          tab === "isos"
+            ? { isoStorageKey: uploadTarget }
+            : { templateStorageKey: uploadTarget },
+        );
+      }
       toast("ok", "Upload finished.");
       void invalidateMedia();
     },
@@ -343,15 +370,15 @@ export default function MediaPage() {
         }
       />
 
-      <div className="space-y-4 px-4 py-4 md:px-8 md:py-6">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="space-y-3 px-4 py-3 md:space-y-4 md:px-8 md:py-6">
+        <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
           <TabBtn active={tab === "isos"} onClick={() => setTab("isos")}>
             ISOs
           </TabBtn>
           <TabBtn active={tab === "templates"} onClick={() => setTab("templates")}>
             CT Templates
           </TabBtn>
-          <div className="ml-auto flex flex-wrap gap-2">
+          <div className="ml-auto flex flex-wrap gap-1.5 md:gap-2">
             <button
               type="button"
               onClick={() => {
@@ -363,26 +390,27 @@ export default function MediaPage() {
                   setCatalogTarget(storageKey(catalogStorageOptions[0]));
                 }
               }}
-              className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-line px-3 py-2 text-sm hover:bg-surface-2 sm:min-h-0"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line px-2 py-1.5 text-xs hover:bg-surface-2 md:rounded-xl md:px-3 md:text-sm"
             >
-              <Package className="h-4 w-4" />
+              <Package className="h-3.5 w-3.5 md:h-4 md:w-4" />
               Catalog
             </button>
             <button
               type="button"
               onClick={() => setDownloadOpen(true)}
-              className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-line px-3 py-2 text-sm hover:bg-surface-2 sm:min-h-0"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line px-2 py-1.5 text-xs hover:bg-surface-2 md:rounded-xl md:px-3 md:text-sm"
             >
-              <Download className="h-4 w-4" />
-              From URL
+              <Download className="h-3.5 w-3.5 md:h-4 md:w-4" />
+              <span className="hidden sm:inline">From URL</span>
+              <span className="sm:hidden">URL</span>
             </button>
             <button
               type="button"
               disabled={!uploadTarget || uploadMut.isPending}
               onClick={() => fileRef.current?.click()}
-              className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-accent px-3 py-2 text-sm font-medium text-black hover:bg-accent-2 disabled:opacity-40 sm:min-h-0"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-2 py-1.5 text-xs font-medium text-black hover:bg-accent-2 disabled:opacity-40 md:rounded-xl md:px-3 md:text-sm"
             >
-              <Upload className="h-4 w-4" />
+              <Upload className="h-3.5 w-3.5 md:h-4 md:w-4" />
               {uploadMut.isPending ? "Uploading…" : "Upload"}
             </button>
             <input
@@ -398,6 +426,42 @@ export default function MediaPage() {
           </div>
         </div>
 
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="min-w-0 flex-1 sm:max-w-xs">
+            <span className="mb-1 block text-[11px] text-muted">Upload storage</span>
+            <select
+              value={uploadTarget}
+              onChange={(e) => {
+                setUploadTarget(e.target.value);
+                if (e.target.value) {
+                  saveUploadPrefs(
+                    tab === "isos"
+                      ? { isoStorageKey: e.target.value }
+                      : { templateStorageKey: e.target.value },
+                  );
+                }
+              }}
+              className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-accent md:rounded-xl md:px-3 md:py-2"
+            >
+              <option value="">— select —</option>
+              {storageOptions.map((s) => (
+                <option key={storageKey(s)} value={storageKey(s)}>
+                  {s.storage} · {s.node}
+                  {s.shared ? " (shared)" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => setShowDropZone((v) => !v)}
+            className="rounded-lg border border-line px-2.5 py-1.5 text-xs text-muted hover:bg-surface-2"
+          >
+            {showDropZone ? "Hide drop zone" : "Show drop zone"}
+          </button>
+        </div>
+
+        {showDropZone ? (
         <div
           onDragEnter={(e) => {
             e.preventDefault();
@@ -413,44 +477,26 @@ export default function MediaPage() {
             setDragOver(false);
             startUpload(e.dataTransfer.files);
           }}
-          className={`rounded-2xl border border-dashed px-4 py-5 text-sm transition ${
+          className={`rounded-xl border border-dashed px-3 py-3 text-xs transition md:rounded-2xl md:px-4 md:py-5 md:text-sm ${
             dragOver
               ? "border-accent bg-accent/10 text-ink"
               : "border-line bg-surface/50 text-muted"
           }`}
         >
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <p className="flex-1">
-              Drop {tab === "isos" ? "an ISO" : "a template"} here, or use Upload.
-              Choose the target storage below.
-            </p>
-            <label className="sm:w-64">
-              <span className="mb-1 block text-[11px] text-muted">Upload storage</span>
-              <select
-                value={uploadTarget}
-                onChange={(e) => setUploadTarget(e.target.value)}
-                className="w-full rounded-xl border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
-              >
-                <option value="">— select —</option>
-                {storageOptions.map((s) => (
-                  <option key={storageKey(s)} value={storageKey(s)}>
-                    {s.storage} · {s.node}
-                    {s.shared ? " (shared)" : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+          <p>
+            Drop {tab === "isos" ? "an ISO" : "a template"} here, or use Upload.
+          </p>
         </div>
+        ) : null}
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <label className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
             <input
               value={qtext}
               onChange={(e) => setQtext(e.target.value)}
               placeholder="Search name, storage, node…"
-              className="w-full rounded-xl border border-line bg-surface py-2.5 pl-9 pr-3 text-sm outline-none focus:border-accent"
+              className="w-full rounded-lg border border-line bg-surface py-1.5 pl-8 pr-2 text-sm outline-none focus:border-accent md:rounded-xl md:py-2 md:pl-9"
             />
           </label>
           <label className="sm:w-52">
@@ -458,7 +504,7 @@ export default function MediaPage() {
             <select
               value={storageFilter}
               onChange={(e) => setStorageFilter(e.target.value)}
-              className="w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-sm outline-none focus:border-accent"
+              className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-accent md:rounded-xl md:px-3 md:py-2.5"
             >
               <option value="all">All storages</option>
               {storageLabels.map((s) => (
@@ -481,27 +527,27 @@ export default function MediaPage() {
             <table className="w-full min-w-[44rem] text-left text-sm">
               <thead>
                 <tr className="border-b border-line text-[11px] uppercase tracking-wide text-muted">
-                  <th className="px-4 py-3 font-medium">
+                  <th className="px-3 py-2 font-medium md:px-4 md:py-3">
                     <button type="button" onClick={() => toggleSort("name")} className="hover:text-ink">
                       Volume{sortMark("name")}
                     </button>
                   </th>
-                  <th className="px-4 py-3 font-medium">
+                  <th className="px-3 py-2 font-medium md:px-4 md:py-3">
                     <button type="button" onClick={() => toggleSort("size")} className="hover:text-ink">
                       Size{sortMark("size")}
                     </button>
                   </th>
-                  <th className="px-4 py-3 font-medium">Storage</th>
-                  <th className="px-4 py-3 font-medium">Node</th>
-                  <th className="hidden px-4 py-3 font-medium sm:table-cell">
+                  <th className="px-3 py-2 font-medium md:px-4 md:py-3">Storage</th>
+                  <th className="px-3 py-2 font-medium md:px-4 md:py-3">Node</th>
+                  <th className="hidden px-3 py-2 font-medium sm:table-cell md:px-4 md:py-3">
                     <button type="button" onClick={() => toggleSort("date")} className="hover:text-ink">
                       Created{sortMark("date")}
                     </button>
                   </th>
                   {tab === "isos" ? (
-                    <th className="px-4 py-3 font-medium">In use</th>
+                    <th className="px-3 py-2 font-medium md:px-4 md:py-3">In use</th>
                   ) : null}
-                  <th className="px-4 py-3 font-medium text-right">Actions</th>
+                  <th className="px-3 py-2 font-medium text-right md:px-4 md:py-3">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -509,21 +555,21 @@ export default function MediaPage() {
                   const users = usageMap[item.volid] || [];
                   return (
                     <tr key={`${item.node}:${item.volid}`} className="hover:bg-surface-2/40">
-                      <td className="max-w-xs truncate px-4 py-3 font-mono text-xs" title={item.volid}>
+                      <td className="max-w-xs truncate px-3 py-2 font-mono text-xs md:px-4 md:py-3" title={item.volid}>
                         {volname(item.volid)}
                       </td>
-                      <td className="px-4 py-3 text-muted">{formatBytes(item.size)}</td>
-                      <td className="px-4 py-3 text-muted">{item.storage}</td>
-                      <td className="px-4 py-3 text-muted">{item.node}</td>
-                      <td className="hidden px-4 py-3 text-muted sm:table-cell">
+                      <td className="px-3 py-2 text-muted md:px-4 md:py-3">{formatBytes(item.size)}</td>
+                      <td className="px-3 py-2 text-muted md:px-4 md:py-3">{item.storage}</td>
+                      <td className="px-3 py-2 text-muted md:px-4 md:py-3">{item.node}</td>
+                      <td className="hidden px-3 py-2 text-muted sm:table-cell md:px-4 md:py-3">
                         {formatSnapTime(item.ctime)}
                       </td>
                       {tab === "isos" ? (
-                        <td className="px-4 py-3 text-muted">
+                        <td className="px-3 py-2 text-muted md:px-4 md:py-3">
                           <UsageCell users={users} loading={usage.isLoading} />
                         </td>
                       ) : null}
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2 md:px-4 md:py-3">
                         <div className="flex justify-end gap-2">
                           {tab === "isos" ? (
                             <button
@@ -877,7 +923,7 @@ function TabBtn({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-xl border px-4 py-2 text-sm font-medium transition ${
+      className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition md:rounded-xl md:px-4 md:py-2 md:text-sm ${
         active
           ? "border-accent bg-accent/15 text-accent"
           : "border-line text-muted hover:bg-surface-2 hover:text-ink"

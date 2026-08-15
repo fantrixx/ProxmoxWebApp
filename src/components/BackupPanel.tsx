@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { dataApi } from "../api";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { formatBytes, formatSnapTime } from "../format";
 import { useApp } from "../context";
+import { loadBackupPrefs } from "../prefs";
 import type { GuestType, MediaItem } from "../types";
 
 function volname(volid: string): string {
@@ -30,9 +31,14 @@ export function BackupPanel({
 }) {
   const { toast, trackJob, attachJobUpid, failJob, startGuestBackup } = useApp();
   const qc = useQueryClient();
-  const [storage, setStorage] = useState("");
-  const [mode, setMode] = useState<"snapshot" | "suspend" | "stop">("snapshot");
-  const [compress, setCompress] = useState<"zstd" | "gzip" | "lzo" | "none">("zstd");
+  const prefs = loadBackupPrefs();
+  const [storage, setStorage] = useState(prefs.storage || "");
+  const [mode, setMode] = useState<"snapshot" | "suspend" | "stop">(
+    prefs.mode || "snapshot",
+  );
+  const [compress, setCompress] = useState<"zstd" | "gzip" | "lzo" | "none">(
+    prefs.compress || "zstd",
+  );
   const [restoreTarget, setRestoreTarget] = useState<MediaItem | null>(null);
   const [restoreVmid, setRestoreVmid] = useState(vmid);
   const [restoreForce, setRestoreForce] = useState(false);
@@ -53,6 +59,18 @@ export function BackupPanel({
     const all = storages.data?.storages || [];
     return all.filter((s) => s.node === node || s.shared);
   }, [storages.data, node]);
+
+  useEffect(() => {
+    if (storage) {
+      if (nodeStorages.some((s) => s.storage === storage)) return;
+    }
+    const pref = loadBackupPrefs().storage;
+    if (pref && nodeStorages.some((s) => s.storage === pref)) {
+      setStorage(pref);
+      return;
+    }
+    if (nodeStorages[0]?.storage) setStorage(nodeStorages[0].storage);
+  }, [nodeStorages, storage]);
 
   const selectedStorage = storage || nodeStorages[0]?.storage || "";
 

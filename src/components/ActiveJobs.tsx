@@ -226,7 +226,7 @@ function JobRow({
   const title = snapshot.running ? job.title : kindLabel(job.kind, phase);
 
   return (
-    <div className={compact ? "px-4 py-3 md:px-8" : "px-4 py-4 md:px-8"}>
+    <div className={compact ? "px-4 py-2 md:px-8 md:py-3" : "px-4 py-2.5 md:px-8 md:py-4"}>
       <div className="flex items-start gap-3">
         <div className="mt-0.5">
           <StatusIcon running={snapshot.running} failed={snapshot.failed} />

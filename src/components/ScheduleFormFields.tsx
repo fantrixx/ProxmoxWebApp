@@ -108,6 +108,44 @@ export function ScheduleFormFields({
 
   return (
     <>
+      <div className="flex flex-wrap gap-1.5">
+        <TemplateChip
+          label="Daily backup 02:00"
+          onClick={() =>
+            setForm((f) => ({
+              ...f,
+              action: "backup",
+              time: "02:00",
+              days: [],
+              backupMode: "snapshot",
+              compress: "zstd",
+            }))
+          }
+        />
+        <TemplateChip
+          label="Weekdays shut down 22:00"
+          onClick={() =>
+            setForm((f) => ({
+              ...f,
+              action: "shutdown",
+              time: "22:00",
+              days: [1, 2, 3, 4, 5],
+            }))
+          }
+        />
+        <TemplateChip
+          label="Daily start 08:00"
+          onClick={() =>
+            setForm((f) => ({
+              ...f,
+              action: "start",
+              time: "08:00",
+              days: [],
+            }))
+          }
+        />
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-2">
         <label>
           <span className={labelCls}>Action</span>
@@ -217,6 +255,18 @@ export function ScheduleFormFields({
         </div>
       </div>
     </>
+  );
+}
+
+function TemplateChip({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-md border border-line px-2 py-1 text-[11px] text-muted hover:border-accent/40 hover:bg-accent/10 hover:text-accent"
+    >
+      {label}
+    </button>
   );
 }
 

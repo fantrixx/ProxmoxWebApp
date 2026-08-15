@@ -138,11 +138,11 @@ export default function GuestDetail() {
         title={name}
         subtitle={`${guestLabel(guestType)} ${vmid} on ${node}`}
       />
-      <div className="max-w-full space-y-6 overflow-x-hidden px-4 py-4 md:px-8 md:py-6">
+      <div className="max-w-full space-y-4 overflow-x-hidden px-4 py-3 md:space-y-6 md:px-8 md:py-6">
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="inline-flex min-h-11 cursor-pointer items-center gap-1 text-sm text-muted hover:text-ink sm:min-h-0"
+          className="inline-flex items-center gap-1 text-xs text-muted hover:text-ink md:text-sm"
         >
           <ArrowLeft className="size-4" />
           Back
@@ -333,7 +333,7 @@ function Btn({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border px-3 py-2.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-0 sm:w-auto sm:py-1.5 ${tone}`}
+      className={`inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto ${tone}`}
     >
       {children}
     </button>

@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Box, Cpu, HardDrive, ImagePlus, Network, Server, X } from "lucide-react";
 import { dataApi } from "../api";
 import { useApp } from "../context";
+import { loadCreatePrefs, saveCreatePrefs } from "../prefs";
 import type { GuestType } from "../types";
 import {
   GuestIconPicker,
@@ -85,6 +86,7 @@ export function CreateGuestDialog({
     bridge: "",
   }));
   const [showPassword, setShowPassword] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [iconDraft, setIconDraft] = useState<IconDraft>({ mode: "auto" });
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
 
@@ -149,15 +151,21 @@ export function CreateGuestDialog({
 
   useEffect(() => {
     if (!open) return;
+    const prefs = loadCreatePrefs();
+    const base = defaultsFor(initialType);
     setType(initialType);
     setForm({
-      ...defaultsFor(initialType),
-      node: "",
+      ...base,
+      cores: prefs.cores || base.cores,
+      memory: prefs.memory || base.memory,
+      diskGiB: prefs.diskGiB || base.diskGiB,
+      node: prefs.node || "",
       vmid: "",
-      storageKey: "",
-      bridge: "",
+      storageKey: prefs.storageKey || "",
+      bridge: prefs.bridge || "",
     });
     setShowPassword(false);
+    setShowAdvanced(false);
     setIconDraft({ mode: "auto" });
     setIconPickerOpen(false);
   }, [open, initialType]);
@@ -165,7 +173,9 @@ export function CreateGuestDialog({
   useEffect(() => {
     if (!open) return;
     if (!form.node && nodes[0]) {
-      setForm((f) => ({ ...f, node: nodes[0] }));
+      const prefs = loadCreatePrefs();
+      const prefer = prefs.node && nodes.includes(prefs.node) ? prefs.node : nodes[0];
+      setForm((f) => ({ ...f, node: prefer }));
     }
   }, [open, nodes, form.node]);
 
@@ -179,11 +189,22 @@ export function CreateGuestDialog({
   useEffect(() => {
     if (!open || !form.node) return;
     const first = nodeDiskStorages[0];
-    if (!form.storageKey && first) {
-      setForm((f) => ({
-        ...f,
-        storageKey: storageKey(first.node, first.storage),
-      }));
+    const prefs = loadCreatePrefs();
+    if (!form.storageKey) {
+      if (
+        prefs.storageKey &&
+        nodeDiskStorages.some((s) => {
+          const p = parseStorageKey(prefs.storageKey!);
+          return p && s.storage === p.storage && (s.node === form.node || s.shared);
+        })
+      ) {
+        setForm((f) => ({ ...f, storageKey: prefs.storageKey! }));
+      } else if (first) {
+        setForm((f) => ({
+          ...f,
+          storageKey: storageKey(first.node, first.storage),
+        }));
+      }
     } else if (form.storageKey) {
       const parsed = parseStorageKey(form.storageKey);
       const stillOk = nodeDiskStorages.some(
@@ -201,11 +222,15 @@ export function CreateGuestDialog({
   useEffect(() => {
     if (!open) return;
     const list = bridges.data?.bridges || [];
-    const preferred = list.find((b) => b.iface === "vmbr0") || list[0];
+    const prefs = loadCreatePrefs();
+    const preferred =
+      (prefs.bridge && list.find((b) => b.iface === prefs.bridge)) ||
+      list.find((b) => b.iface === "vmbr0") ||
+      list[0];
     if (!form.bridge && preferred) {
       setForm((f) => ({ ...f, bridge: preferred.iface }));
     } else if (!form.bridge && !bridges.isLoading) {
-      setForm((f) => ({ ...f, bridge: "vmbr0" }));
+      setForm((f) => ({ ...f, bridge: prefs.bridge || "vmbr0" }));
     }
   }, [open, bridges.data, bridges.isLoading, form.bridge]);
 
@@ -293,6 +318,14 @@ export function CreateGuestDialog({
       return created;
     },
     onSuccess: (data) => {
+      saveCreatePrefs({
+        node: form.node,
+        storageKey: form.storageKey,
+        bridge: form.bridge,
+        cores: form.cores,
+        memory: form.memory,
+        diskGiB: form.diskGiB,
+      });
       const label = form.name.trim() || `Guest ${data.vmid}`;
       trackJob({
         kind: "create",
@@ -427,27 +460,6 @@ export function CreateGuestDialog({
               </div>
             </Section>
 
-            <Section icon={<ImagePlus className="size-3.5" />} title="Logo">
-              <div className="flex items-center gap-3 rounded-xl border border-line bg-bg/50 p-3">
-                <LogoPreview src={iconPreview.src} className="size-14" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{iconPreview.label}</p>
-                  <p className="text-xs text-muted">{iconPreview.hint}</p>
-                </div>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => setIconPickerOpen(true)}
-                  className="shrink-0 rounded-xl border border-line px-3 py-2 text-sm hover:bg-surface-2"
-                >
-                  Change
-                </button>
-              </div>
-              <Hint>
-                Logos update as you type the name. You can lock a catalog icon or upload your own.
-              </Hint>
-            </Section>
-
             <Section
               icon={<HardDrive className="size-3.5" />}
               title={type === "lxc" ? "Template & disk" : "Disk & install media"}
@@ -527,125 +539,42 @@ export function CreateGuestDialog({
               </div>
             </Section>
 
-            <Section icon={<Cpu className="size-3.5" />} title="Resources">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Field label="CPU cores">
-                  <input
-                    type="number"
-                    min={1}
-                    max={128}
-                    value={form.cores}
-                    disabled={busy}
-                    onChange={(e) => patch("cores", e.target.value)}
-                    className={inputClass}
-                    required
-                  />
-                </Field>
-                <Field label="Memory (MiB)">
-                  <input
-                    type="number"
-                    min={16}
-                    value={form.memory}
-                    disabled={busy}
-                    onChange={(e) => patch("memory", e.target.value)}
-                    className={inputClass}
-                    required
-                  />
-                </Field>
-                {type === "lxc" ? (
-                  <Field label="Swap (MiB)">
-                    <input
-                      type="number"
-                      min={0}
-                      value={form.swap}
-                      disabled={busy}
-                      onChange={(e) => patch("swap", e.target.value)}
-                      className={inputClass}
-                    />
-                  </Field>
-                ) : (
-                  <div className="hidden sm:block" />
-                )}
-              </div>
-            </Section>
-
-            <Section icon={<Network className="size-3.5" />} title="Network">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Bridge">
-                  <select
-                    value={form.bridge}
-                    disabled={busy || bridges.isLoading}
-                    onChange={(e) => patch("bridge", e.target.value)}
-                    className={inputClass}
-                    required
-                  >
-                    {(bridges.data?.bridges || []).length === 0 ? (
-                      <option value={form.bridge || "vmbr0"}>{form.bridge || "vmbr0"}</option>
-                    ) : (
-                      bridges.data!.bridges.map((b) => (
-                        <option key={b.iface} value={b.iface}>
-                          {b.iface}
-                          {!b.active ? " (inactive)" : ""}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                </Field>
-                <Field label="IP">
-                  <input value="DHCP" disabled className={`${inputClass} opacity-70`} />
-                </Field>
-              </div>
-              <Hint>DHCP is used by default so the guest comes online without static config.</Hint>
-            </Section>
-
             {type === "lxc" ? (
               <Section icon={<Box className="size-3.5" />} title="Access">
-                <div className="grid gap-3">
-                  <Field label="Root password">
-                    <div className="flex gap-2">
-                      <input
-                        type={showPassword ? "text" : "password"}
-                        value={form.password}
-                        disabled={busy}
-                        onChange={(e) => patch("password", e.target.value)}
-                        className={`${inputClass} flex-1`}
-                        required
-                        minLength={5}
-                        autoComplete="new-password"
-                      />
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => setShowPassword((v) => !v)}
-                        className="shrink-0 rounded-xl border border-line px-3 text-sm hover:bg-surface-2"
-                      >
-                        {showPassword ? "Hide" : "Show"}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => {
-                          const pw = randomPassword();
-                          patch("password", pw);
-                          setShowPassword(true);
-                        }}
-                        className="shrink-0 rounded-xl border border-line px-3 text-sm hover:bg-surface-2"
-                      >
-                        Generate
-                      </button>
-                    </div>
-                  </Field>
-                  <label className="flex items-center gap-2 text-sm text-muted">
+                <Field label="Root password">
+                  <div className="flex gap-2">
                     <input
-                      type="checkbox"
-                      checked={form.unprivileged}
+                      type={showPassword ? "text" : "password"}
+                      value={form.password}
                       disabled={busy}
-                      onChange={(e) => patch("unprivileged", e.target.checked)}
-                      className="accent-accent"
+                      onChange={(e) => patch("password", e.target.value)}
+                      className={`${inputClass} flex-1`}
+                      required
+                      minLength={5}
+                      autoComplete="new-password"
                     />
-                    Unprivileged container (recommended)
-                  </label>
-                </div>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="shrink-0 rounded-xl border border-line px-3 text-sm hover:bg-surface-2"
+                    >
+                      {showPassword ? "Hide" : "Show"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => {
+                        const pw = randomPassword();
+                        patch("password", pw);
+                        setShowPassword(true);
+                      }}
+                      className="shrink-0 rounded-xl border border-line px-3 text-sm hover:bg-surface-2"
+                    >
+                      Generate
+                    </button>
+                  </div>
+                </Field>
               </Section>
             ) : null}
 
@@ -659,6 +588,124 @@ export function CreateGuestDialog({
               />
               Start after create
             </label>
+
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((v) => !v)}
+              className="w-full rounded-xl border border-dashed border-line px-3 py-2 text-left text-sm text-muted hover:border-line-2 hover:text-ink"
+            >
+              {showAdvanced ? "Hide advanced options" : "Show advanced options"}
+              <span className="mt-0.5 block text-[11px] text-muted">
+                Logo, CPU/RAM, network, and LXC privilege
+              </span>
+            </button>
+
+            {showAdvanced ? (
+              <>
+                <Section icon={<ImagePlus className="size-3.5" />} title="Logo">
+                  <div className="flex items-center gap-3 rounded-xl border border-line bg-bg/50 p-3">
+                    <LogoPreview src={iconPreview.src} className="size-14" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{iconPreview.label}</p>
+                      <p className="text-xs text-muted">{iconPreview.hint}</p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setIconPickerOpen(true)}
+                      className="shrink-0 rounded-xl border border-line px-3 py-2 text-sm hover:bg-surface-2"
+                    >
+                      Change
+                    </button>
+                  </div>
+                </Section>
+
+                <Section icon={<Cpu className="size-3.5" />} title="Resources">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Field label="CPU cores">
+                      <input
+                        type="number"
+                        min={1}
+                        max={128}
+                        value={form.cores}
+                        disabled={busy}
+                        onChange={(e) => patch("cores", e.target.value)}
+                        className={inputClass}
+                        required
+                      />
+                    </Field>
+                    <Field label="Memory (MiB)">
+                      <input
+                        type="number"
+                        min={16}
+                        value={form.memory}
+                        disabled={busy}
+                        onChange={(e) => patch("memory", e.target.value)}
+                        className={inputClass}
+                        required
+                      />
+                    </Field>
+                    {type === "lxc" ? (
+                      <Field label="Swap (MiB)">
+                        <input
+                          type="number"
+                          min={0}
+                          value={form.swap}
+                          disabled={busy}
+                          onChange={(e) => patch("swap", e.target.value)}
+                          className={inputClass}
+                        />
+                      </Field>
+                    ) : (
+                      <div className="hidden sm:block" />
+                    )}
+                  </div>
+                </Section>
+
+                <Section icon={<Network className="size-3.5" />} title="Network">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Bridge">
+                      <select
+                        value={form.bridge}
+                        disabled={busy || bridges.isLoading}
+                        onChange={(e) => patch("bridge", e.target.value)}
+                        className={inputClass}
+                        required
+                      >
+                        {(bridges.data?.bridges || []).length === 0 ? (
+                          <option value={form.bridge || "vmbr0"}>
+                            {form.bridge || "vmbr0"}
+                          </option>
+                        ) : (
+                          bridges.data!.bridges.map((b) => (
+                            <option key={b.iface} value={b.iface}>
+                              {b.iface}
+                              {!b.active ? " (inactive)" : ""}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    </Field>
+                    <Field label="IP">
+                      <input value="DHCP" disabled className={`${inputClass} opacity-70`} />
+                    </Field>
+                  </div>
+                </Section>
+
+                {type === "lxc" ? (
+                  <label className="flex items-center gap-2 text-sm text-muted">
+                    <input
+                      type="checkbox"
+                      checked={form.unprivileged}
+                      disabled={busy}
+                      onChange={(e) => patch("unprivileged", e.target.checked)}
+                      className="accent-accent"
+                    />
+                    Unprivileged container (recommended)
+                  </label>
+                ) : null}
+              </>
+            ) : null}
           </div>
 
           <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-line px-5 py-4 sm:flex-row sm:justify-end">

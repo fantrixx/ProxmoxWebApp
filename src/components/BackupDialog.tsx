@@ -5,6 +5,8 @@ import { Loader2, X } from "lucide-react";
 import { dataApi } from "../api";
 import { formatBytes, formatSnapTime } from "../format";
 import { useApp } from "../context";
+import { loadBackupPrefs } from "../prefs";
+import { rememberBackupSettings } from "../quickBackup";
 import type { GuestType, MediaItem } from "../types";
 
 function backupStorageOf(item: MediaItem): string {
@@ -36,9 +38,14 @@ export function BackupDialog({
   const { toast, startGuestBackup } = useApp();
   const qc = useQueryClient();
   const vmidStr = String(vmid);
-  const [storage, setStorage] = useState("");
-  const [mode, setMode] = useState<"snapshot" | "suspend" | "stop">("snapshot");
-  const [compress, setCompress] = useState<"zstd" | "gzip" | "lzo" | "none">("zstd");
+  const prefs = loadBackupPrefs();
+  const [storage, setStorage] = useState(prefs.storage || "");
+  const [mode, setMode] = useState<"snapshot" | "suspend" | "stop">(
+    prefs.mode || "snapshot",
+  );
+  const [compress, setCompress] = useState<"zstd" | "gzip" | "lzo" | "none">(
+    prefs.compress || "zstd",
+  );
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
 
@@ -65,9 +72,24 @@ export function BackupDialog({
       setStarting(false);
       return;
     }
-    if (!storage && nodeStorages[0]?.storage) {
-      setStorage(nodeStorages[0].storage);
+    const pref = loadBackupPrefs();
+    if (pref.mode) setMode(pref.mode);
+    if (pref.compress) setCompress(pref.compress);
+    if (pref.storage && !storage) setStorage(pref.storage);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!open) return;
+    if (storage) {
+      const ok = nodeStorages.some((s) => s.storage === storage);
+      if (ok) return;
     }
+    const prefStore = loadBackupPrefs().storage;
+    if (prefStore && nodeStorages.some((s) => s.storage === prefStore)) {
+      setStorage(prefStore);
+      return;
+    }
+    if (nodeStorages[0]?.storage) setStorage(nodeStorages[0].storage);
   }, [open, nodeStorages, storage]);
 
   useEffect(() => {
@@ -123,6 +145,11 @@ export function BackupDialog({
     setStarting(true);
     try {
       await startGuestBackup(opts);
+      rememberBackupSettings({
+        storage: selectedStorage,
+        mode,
+        compress,
+      });
       void qc.invalidateQueries({ queryKey: ["guestBackups", node, type, vmidStr] });
       void qc.invalidateQueries({ queryKey: ["tasks"] });
       onClose();

@@ -32,7 +32,7 @@ export default function GuestList({ kind }: { kind: GuestType }) {
         title={title}
         subtitle={`${running} running · ${guests.length} total`}
       />
-      <div className="px-4 py-4 md:px-8 md:py-6">
+      <div className="px-4 py-3 md:px-8 md:py-6">
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <div className="relative w-full sm:w-72">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />

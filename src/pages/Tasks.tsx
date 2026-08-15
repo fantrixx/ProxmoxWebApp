@@ -158,7 +158,7 @@ function TaskRow({ task }: { task: PveTask }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm hover:bg-surface-2/50"
+        className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm hover:bg-surface-2/50 md:px-4 md:py-3"
       >
         {open ? (
           <ChevronDown className="size-4 shrink-0 text-muted" />
@@ -193,7 +193,7 @@ export default function TasksPage() {
   return (
     <div>
       <Header title="Tasks" subtitle={`${tasks.length} recent tasks`} />
-      <div className="space-y-4 px-4 py-4 md:px-8 md:py-6">
+      <div className="space-y-3 px-4 py-3 md:space-y-4 md:px-8 md:py-6">
         {q.isError ? (
           <p className="text-sm text-bad">{(q.error as Error).message}</p>
         ) : q.isLoading ? (
@@ -201,7 +201,7 @@ export default function TasksPage() {
         ) : tasks.length === 0 ? (
           <p className="text-sm text-muted">No tasks found.</p>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-1.5 md:space-y-2">
             {tasks.map((task) => (
               <TaskRow key={task.upid} task={task} />
             ))}

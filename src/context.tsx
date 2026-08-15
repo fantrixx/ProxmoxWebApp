@@ -1,6 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useState, createContext, type ReactNode } from "react";
 import { dataApi } from "./api";
 import { newId } from "./id";
+import { rememberBackupSettings } from "./quickBackup";
 import type { AuthUser, GuestType } from "./types";
 
 export type ConsoleTarget = {
@@ -214,6 +215,11 @@ export function AppProvider({
           throw new Error(message);
         }
         attachJobUpid(jobId, res.upid);
+        rememberBackupSettings({
+          storage: opts.storage,
+          mode: opts.mode,
+          compress: opts.compress,
+        });
         toast("ok", "Backup started.");
         return res;
       } catch (err) {
