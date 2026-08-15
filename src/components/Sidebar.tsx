@@ -1,4 +1,4 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   Cpu,
   Disc3,
@@ -64,6 +64,7 @@ export function Sidebar() {
       </nav>
       <div className="border-t border-line px-3 py-3">
         <SidebarNodes />
+        <SidebarGuests />
         <div className="mt-3 space-y-0.5 px-2 text-[11px] text-muted">
           <p>Live data every 3 seconds</p>
           <p className="font-mono">
@@ -100,6 +101,45 @@ function SidebarNodes() {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+function SidebarGuests() {
+  const q = useResources();
+  const navigate = useNavigate();
+  const guests = (q.data?.resources || []).filter(
+    (r) => (r.type === "lxc" || r.type === "qemu") && !r.template,
+  );
+  const running = guests.filter((g) => g.status === "running").length;
+  const total = guests.length;
+  const loading = q.isLoading && !q.data;
+
+  return (
+    <div className="mt-3 border-t border-line/80 pt-3">
+      <p className="mb-2 px-2 text-[11px] font-medium uppercase tracking-wide text-muted">
+        Guests
+      </p>
+      <button
+        type="button"
+        onClick={() => navigate("/?running=1")}
+        title="Show running guests on Overview"
+        className="flex w-full items-center gap-3 rounded-xl border border-line/80 bg-surface/50 px-2.5 py-2 text-left transition hover:border-line-2 hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+      >
+        <span className="min-w-0">
+          <span className="block text-lg font-semibold tabular-nums text-good leading-none">
+            {loading ? "—" : running}
+          </span>
+          <span className="mt-0.5 block text-[10px] text-good/80">running</span>
+        </span>
+        <span className="h-8 w-px shrink-0 bg-line" aria-hidden />
+        <span className="min-w-0">
+          <span className="block text-base font-semibold tabular-nums text-ink/90 leading-none">
+            {loading ? "—" : total}
+          </span>
+          <span className="mt-0.5 block text-[10px] text-muted">total</span>
+        </span>
+      </button>
     </div>
   );
 }

@@ -117,7 +117,7 @@ export default function Dashboard() {
             .join(" · ")
         }
       />
-      <div className="space-y-6 px-4 py-4 md:space-y-8 md:px-8 md:py-6">
+      <div className="space-y-4 px-4 py-3 md:space-y-8 md:px-8 md:py-6">
         <UpdateBanner canUpdate />
 
         {q.isError ? (
@@ -126,83 +126,77 @@ export default function Dashboard() {
           </p>
         ) : null}
 
-        <section id="overview-guests" className="scroll-mt-28 md:scroll-mt-32">
-          <div className="sticky top-16 z-30 -mx-4 mb-3 border-b border-line bg-bg/95 px-4 py-3 backdrop-blur md:top-20 md:-mx-8 md:px-8">
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-sm font-medium text-muted">Container & VMs</h2>
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-xs text-muted">
-                    {q.isLoading
-                      ? "Loading…"
-                      : `Showing ${filtered.length} of ${view.guests.length} guests`}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setCreateType("lxc")}
-                    className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-line px-3 py-1.5 text-xs font-medium hover:bg-surface-2 sm:min-h-0"
-                  >
-                    <Plus className="size-3.5" />
-                    New CT
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCreateType("qemu")}
-                    className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-accent px-3 py-1.5 text-xs font-medium text-black hover:bg-accent-2 sm:min-h-0"
-                  >
-                    <Plus className="size-3.5" />
-                    New VM
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="relative w-full lg:max-w-xs">
-                  <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
+        <section id="overview-guests" className="scroll-mt-20 md:scroll-mt-28">
+          <div className="sticky top-14 z-30 -mx-4 mb-2 border-b border-line bg-bg/95 px-4 py-2 backdrop-blur md:top-20 md:-mx-8 md:mb-3 md:px-8 md:py-2.5">
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <div className="relative min-w-0 flex-1">
+                  <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted" />
                   <input
                     value={filters.qtext}
                     onChange={(e) =>
                       setFilters((f) => ({ ...f, qtext: e.target.value }))
                     }
-                    placeholder="Search…"
-                    className="w-full rounded-xl border border-line bg-surface py-2.5 pr-3 pl-9 text-base outline-none focus:border-accent md:text-sm"
+                    placeholder="Search guests…"
+                    className="w-full rounded-lg border border-line bg-surface py-1.5 pr-2 pl-8 text-sm outline-none focus:border-accent md:py-2 md:pl-9"
                   />
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setCreateType("lxc")}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-line px-2 py-1.5 text-xs font-medium hover:bg-surface-2 md:px-2.5"
+                >
+                  <Plus className="size-3.5" />
+                  <span className="hidden sm:inline">New </span>CT
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCreateType("qemu")}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-accent px-2 py-1.5 text-xs font-medium text-black hover:bg-accent-2 md:px-2.5"
+                >
+                  <Plus className="size-3.5" />
+                  <span className="hidden sm:inline">New </span>VM
+                </button>
+              </div>
 
-                <div className="flex flex-wrap items-center gap-2">
-                  <KindChip
-                    active={filters.kind === "all"}
-                    onClick={() => setFilters((f) => ({ ...f, kind: "all" }))}
-                  >
-                    All
-                  </KindChip>
-                  <KindChip
-                    active={filters.kind === "lxc"}
-                    onClick={() => setFilters((f) => ({ ...f, kind: "lxc" }))}
-                  >
-                    CTs
-                  </KindChip>
-                  <KindChip
-                    active={filters.kind === "qemu"}
-                    onClick={() => setFilters((f) => ({ ...f, kind: "qemu" }))}
-                  >
-                    VMs
-                  </KindChip>
-                  <label className="ml-1 flex min-h-11 items-center gap-2 text-sm text-muted sm:min-h-0">
-                    <input
-                      type="checkbox"
-                      checked={filters.onlyRunning}
-                      onChange={(e) =>
-                        setFilters((f) => ({
-                          ...f,
-                          onlyRunning: e.target.checked,
-                        }))
-                      }
-                      className="accent-accent"
-                    />
-                    Running only
-                  </label>
-                </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <KindChip
+                  active={filters.kind === "all"}
+                  onClick={() => setFilters((f) => ({ ...f, kind: "all" }))}
+                >
+                  All
+                </KindChip>
+                <KindChip
+                  active={filters.kind === "lxc"}
+                  onClick={() => setFilters((f) => ({ ...f, kind: "lxc" }))}
+                >
+                  CTs
+                </KindChip>
+                <KindChip
+                  active={filters.kind === "qemu"}
+                  onClick={() => setFilters((f) => ({ ...f, kind: "qemu" }))}
+                >
+                  VMs
+                </KindChip>
+                <label className="ml-0.5 flex items-center gap-1.5 text-xs text-muted">
+                  <input
+                    type="checkbox"
+                    checked={filters.onlyRunning}
+                    onChange={(e) =>
+                      setFilters((f) => ({
+                        ...f,
+                        onlyRunning: e.target.checked,
+                      }))
+                    }
+                    className="accent-accent"
+                  />
+                  Running
+                </label>
+                <span className="ml-auto text-[11px] tabular-nums text-muted">
+                  {q.isLoading
+                    ? "…"
+                    : `${filtered.length}/${view.guests.length}`}
+                </span>
               </div>
             </div>
           </div>
@@ -284,7 +278,7 @@ function KindChip({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex min-h-11 items-center rounded-lg border px-3 text-xs font-medium sm:min-h-0 sm:py-1.5 ${
+      className={`inline-flex items-center rounded-md border px-2 py-1 text-[11px] font-medium md:rounded-lg md:px-2.5 md:py-1 md:text-xs ${
         active
           ? "border-accent bg-accent/15 text-accent"
           : "border-line text-muted hover:bg-surface-2"
