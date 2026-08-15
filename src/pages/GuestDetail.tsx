@@ -14,6 +14,7 @@ import { Header } from "../components/Header";
 import { MetricBar } from "../components/MetricBar";
 import { Sparkline } from "../components/Sparkline";
 import { StatusBadge } from "../components/StatusBadge";
+import { GuestTypeIcon } from "../components/GuestTypeIcon";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { IpList } from "../components/IpList";
 import { SnapshotPanel } from "../components/SnapshotPanel";
@@ -97,6 +98,10 @@ export default function GuestDetail() {
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-3">
             <StatusBadge status={status?.status} />
+            <span className="inline-flex items-center gap-1.5 text-sm text-muted">
+              <GuestTypeIcon type={guestType} className="size-3.5" />
+              {guestLabel(guestType)} {vmid}
+            </span>
             <span className="text-sm text-muted">{formatUptime(status?.uptime)}</span>
             <IpList ips={q.data?.ips} />
           </div>

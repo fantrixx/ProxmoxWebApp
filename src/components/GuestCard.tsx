@@ -25,6 +25,7 @@ import {
 import { dataApi } from "../api";
 import { MetricBar } from "./MetricBar";
 import { StatusBadge } from "./StatusBadge";
+import { GuestTypeIcon } from "./GuestTypeIcon";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { BackupDialog } from "./BackupDialog";
 import { ScheduleDialog } from "./ScheduleDialog";
@@ -112,7 +113,8 @@ export function GuestCard({
         <div className="min-w-0">
           <div className="mb-1.5 flex flex-wrap items-center gap-2">
             <StatusBadge status={guest.status} />
-            <span className="rounded-md bg-bg px-1.5 py-0.5 font-mono text-[11px] text-muted">
+            <span className="inline-flex items-center gap-1 rounded-md bg-bg px-1.5 py-0.5 font-mono text-[11px] text-muted">
+              <GuestTypeIcon type={type} className="size-3" />
               {guestLabel(type)} {guest.vmid}
             </span>
             {backingUp ? (
@@ -129,9 +131,10 @@ export function GuestCard({
           </div>
           <Link
             to={`/guest/${type}/${guest.node}/${guest.vmid}`}
-            className="text-lg font-semibold tracking-tight hover:text-accent"
+            className="flex min-w-0 items-center gap-2 text-lg font-semibold tracking-tight hover:text-accent"
           >
-            {guest.name || `Guest ${guest.vmid}`}
+            <GuestTypeIcon type={type} className="size-4 shrink-0 text-muted" />
+            <span className="truncate">{guest.name || `Guest ${guest.vmid}`}</span>
           </Link>
           <p className="mt-1 text-xs text-muted">
             Node {guest.node}
