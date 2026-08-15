@@ -70,6 +70,8 @@ export default function Dashboard() {
     return { nodes, guests, running, clusterName };
   }, [resources, q.data?.cluster]);
 
+  const clusterCpu = useMemo(() => avgCpu(view.nodes), [view.nodes]);
+
   const filtered = useMemo(() => {
     return view.guests.filter((g) => {
       if (filters.onlyRunning && g.status !== "running") return false;
@@ -127,8 +129,9 @@ export default function Dashboard() {
           />
           <Stat
             title="CPU Cluster"
-            value={avgCpu(view.nodes)}
+            value={clusterCpu.label}
             hint="Average across all nodes"
+            percent={clusterCpu.percent}
           />
         </section>
 
@@ -257,15 +260,26 @@ function Stat({
   title,
   value,
   hint,
+  percent,
   onClick,
 }: {
   title: string;
   value: string;
   hint: string;
+  /** When set, show a usage bar under the value (0–100). */
+  percent?: number | null;
   onClick?: () => void;
 }) {
   const className =
     "rounded-2xl border border-line bg-surface p-5 text-left transition";
+  const body = (
+    <>
+      <div className="text-xs text-muted">{title}</div>
+      <div className="mt-1 text-2xl font-semibold tracking-tight">{value}</div>
+      {percent != null && Number.isFinite(percent) ? <UsageBar percent={percent} /> : null}
+      <div className="mt-1 text-xs text-muted">{hint}</div>
+    </>
+  );
   if (onClick) {
     return (
       <button
@@ -273,23 +287,38 @@ function Stat({
         onClick={onClick}
         className={`${className} cursor-pointer hover:border-line-2 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40`}
       >
-        <div className="text-xs text-muted">{title}</div>
-        <div className="mt-1 text-2xl font-semibold tracking-tight">{value}</div>
-        <div className="mt-1 text-xs text-muted">{hint}</div>
+        {body}
       </button>
     );
   }
+  return <div className={className}>{body}</div>;
+}
+
+function UsageBar({ percent }: { percent: number }) {
+  const clamped = Math.min(100, Math.max(0, percent));
+  const tone =
+    clamped >= 90 ? "bg-bad" : clamped >= 75 ? "bg-warn" : "bg-good";
+
   return (
-    <div className={className}>
-      <div className="text-xs text-muted">{title}</div>
-      <div className="mt-1 text-2xl font-semibold tracking-tight">{value}</div>
-      <div className="mt-1 text-xs text-muted">{hint}</div>
+    <div
+      className="mt-3 h-2 overflow-hidden rounded-full bg-bg"
+      role="meter"
+      aria-valuenow={Math.round(clamped)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-label="CPU cluster usage"
+    >
+      <div
+        className={`h-full rounded-full transition-all duration-500 ${tone}`}
+        style={{ width: `${clamped}%` }}
+      />
     </div>
   );
 }
 
-function avgCpu(nodes: ClusterResource[]): string {
-  if (!nodes.length) return "—";
+function avgCpu(nodes: ClusterResource[]): { label: string; percent: number | null } {
+  if (!nodes.length) return { label: "—", percent: null };
   const avg = nodes.reduce((s, n) => s + (n.cpu || 0), 0) / nodes.length;
-  return `${cpuPct(avg).toFixed(1)} %`;
+  const percent = cpuPct(avg);
+  return { label: `${percent.toFixed(1)} %`, percent };
 }
