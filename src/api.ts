@@ -31,6 +31,19 @@ export type AppVersionInfo = {
   repoUrl: string;
   checkedAt: number;
   error?: string;
+  /** True when this host can run an in-app update (CT install). */
+  canUpdate?: boolean;
+};
+
+export type UpdateStatus = {
+  state: "idle" | "starting" | "running" | "success" | "failed";
+  startedAt: number | null;
+  finishedAt: number | null;
+  triggeredBy: string | null;
+  error?: string;
+  logPath: string;
+  canUpdate: boolean;
+  log?: string;
 };
 
 async function parseError(res: Response): Promise<string> {
@@ -81,6 +94,11 @@ export const authApi = {
 export const metaApi = {
   version: (refresh = false) =>
     api<AppVersionInfo>(`/api/version${refresh ? "?refresh=1" : ""}`),
+  updateStatus: () => api<UpdateStatus>("/api/update"),
+  startUpdate: () =>
+    api<UpdateStatus>("/api/update", {
+      method: "POST",
+    }),
 };
 
 export const dataApi = {

@@ -57,7 +57,7 @@ If `proxpanel-update` is missing on an older install, run the helper script once
 bash -c "$(wget -qLO - https://raw.githubusercontent.com/fantrixx/ProxmoxWebApp/main/ct/proxpanel.sh)"
 ```
 
-The UI also checks GitHub for newer versions and shows an update hint on login and overview pages.
+The UI also checks GitHub for newer versions and shows an update banner on login and overview pages. When signed in, use **Update now** on the banner to run the same update from the UI (pull, rebuild, restart).
 
 ---
 

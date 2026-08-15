@@ -31,6 +31,7 @@ import {
 } from "./session.ts";
 import { startScheduleRunner } from "./schedules.ts";
 import { getAppVersion } from "./version.ts";
+import { getUpdateStatus, startAppUpdate, updateLogTail } from "./update.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isProd = process.env.NODE_ENV === "production";
@@ -82,11 +83,36 @@ app.get("/api/health", (_req, res) => {
 app.get("/api/version", async (req, res) => {
   try {
     const force = req.query.refresh === "1" || req.query.refresh === "true";
-    const info = await getAppVersion(force);
-    res.json(info);
+    const [info, update] = await Promise.all([getAppVersion(force), getUpdateStatus()]);
+    res.json({ ...info, canUpdate: update.canUpdate });
   } catch (err) {
     res.status(500).json({
       error: err instanceof Error ? err.message : "Version check failed",
+    });
+  }
+});
+
+app.get("/api/update", requireSession, async (_req, res) => {
+  try {
+    const status = await getUpdateStatus();
+    const log = await updateLogTail();
+    res.json({ ...status, log });
+  } catch (err) {
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Update status failed",
+    });
+  }
+});
+
+app.post("/api/update", requireSession, async (req, res) => {
+  try {
+    const session = sessionOf(req);
+    const status = await startAppUpdate(session.username);
+    res.json(status);
+  } catch (err) {
+    const status = (err as Error & { status?: number }).status || 500;
+    res.status(status).json({
+      error: err instanceof Error ? err.message : "Update failed to start",
     });
   }
 });

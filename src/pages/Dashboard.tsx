@@ -105,7 +105,7 @@ export default function Dashboard() {
         }
       />
       <div className="space-y-6 px-4 py-4 md:space-y-8 md:px-8 md:py-6">
-        <UpdateBanner />
+        <UpdateBanner canUpdate />
 
         {q.isError ? (
           <p className="rounded-xl border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad">
