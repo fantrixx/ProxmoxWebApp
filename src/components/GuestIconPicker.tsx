@@ -4,6 +4,7 @@ import {
   listServiceCatalog,
   resolveServiceIcon,
   serviceIconUrl,
+  suggestServiceIcons,
 } from "../serviceIcon";
 import type { GuestIconMode, GuestIconRecord } from "../types";
 
@@ -112,6 +113,17 @@ export function GuestIconPicker({
   const [saving, setSaving] = useState(false);
 
   const detected = useMemo(() => resolveServiceIcon(name, tags), [name, tags]);
+  const suggestions = useMemo(
+    () => suggestServiceIcons(name, tags, 8),
+    [name, tags],
+  );
+  const listedSuggestions = useMemo(
+    () =>
+      suggestions
+        .filter((s) => !detected || s.slug !== detected.slug)
+        .slice(0, 6),
+    [suggestions, detected],
+  );
   const preview = resolveIconSrc(value, name, tags);
   const catalog = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -263,6 +275,63 @@ export function GuestIconPicker({
                   </span>
                 </button>
               ) : null}
+
+              {listedSuggestions.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h3 className="text-sm font-medium text-ink">
+                      {detected
+                        ? "Other possibilities"
+                        : "Suggestions for this name"}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setTab("catalog")}
+                      className="text-xs text-accent hover:underline"
+                    >
+                      Browse all
+                    </button>
+                  </div>
+                  <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line">
+                    {listedSuggestions.map((s) => (
+                      <li key={s.slug}>
+                        <button
+                          type="button"
+                          onClick={() => setSlug(s.slug)}
+                          className={`flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-surface-2 ${
+                            value.mode === "cdn" && value.slug === s.slug
+                              ? "bg-accent/10"
+                              : ""
+                          }`}
+                        >
+                          <LogoPreview
+                            src={serviceIconUrl(s.slug)}
+                            className="size-9"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium">
+                              {s.label}
+                            </span>
+                            <span className="block truncate text-xs text-muted">
+                              {s.reason}
+                            </span>
+                          </span>
+                          <span className="shrink-0 text-xs text-accent">Use</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : !detected && name?.trim() ? (
+                <p className="rounded-xl border border-dashed border-line px-3 py-3 text-sm text-muted">
+                  No close matches for “{name.trim()}”. Browse the catalog or
+                  upload an icon.
+                </p>
+              ) : !detected && !name?.trim() ? (
+                <p className="text-sm text-muted">
+                  Enter a name first for suggestions, or open the catalog.
+                </p>
+              ) : null}
             </div>
           ) : (
             <div className="space-y-3">
@@ -273,6 +342,28 @@ export function GuestIconPicker({
               >
                 ← Back
               </button>
+              {!q.trim() && suggestions.length > 0 ? (
+                <div className="space-y-2">
+                  <h3 className="text-xs font-medium uppercase tracking-wide text-muted">
+                    Suggested
+                  </h3>
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {suggestions.slice(0, 6).map((s) => (
+                      <button
+                        key={`sug-${s.slug}`}
+                        type="button"
+                        onClick={() => setSlug(s.slug)}
+                        className="flex w-20 shrink-0 flex-col items-center gap-1.5 rounded-xl border border-accent/30 bg-accent/5 p-2 hover:bg-accent/10"
+                      >
+                        <LogoPreview src={serviceIconUrl(s.slug)} className="size-9" />
+                        <span className="line-clamp-2 text-center text-[10px] leading-tight text-muted">
+                          {s.label}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               <label className="relative block">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
                 <input

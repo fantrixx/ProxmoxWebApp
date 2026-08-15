@@ -109,12 +109,69 @@ const ALIASES: Alias[] = [
   { keys: ["unraid"], slug: "unraid", label: "Unraid" },
   { keys: ["opnsense"], slug: "opnsense", label: "OPNsense" },
   { keys: ["pfsense"], slug: "pfsense", label: "pfSense" },
+  { keys: ["teamspeak", "teamspeak3", "ts3", "ts server"], slug: "teamspeak", label: "TeamSpeak" },
+  { keys: ["discord"], slug: "discord", label: "Discord" },
+  { keys: ["minecraft", "paper mc", "papermc", "spigot", "bukkit"], slug: "minecraft", label: "Minecraft" },
+  { keys: ["steam", "steamcmd"], slug: "steam", label: "Steam" },
+  { keys: ["murmur", "mumble"], slug: "mumble", label: "Mumble" },
+  { keys: ["freepbx"], slug: "freepbx", label: "FreePBX" },
 ];
 
 const CDN = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg";
 
 /** Ambiguous short keys that must be an exact guest name / single token only. */
-const STRICT_ONLY = new Set(["npm", "wp", "hass", "pve", "k8s", "z2m", "mongo", "influx", "elastic", "matrix", "arch"]);
+const STRICT_ONLY = new Set([
+  "npm",
+  "wp",
+  "hass",
+  "pve",
+  "k8s",
+  "z2m",
+  "mongo",
+  "influx",
+  "elastic",
+  "matrix",
+  "arch",
+  "ts3",
+]);
+
+/** Common name suffixes/prefixes that shouldn't block a service match. */
+const NOISE = new Set([
+  "server",
+  "servers",
+  "srv",
+  "svc",
+  "service",
+  "services",
+  "media",
+  "mediaserver",
+  "app",
+  "apps",
+  "ct",
+  "vm",
+  "lxc",
+  "qemu",
+  "node",
+  "host",
+  "prod",
+  "dev",
+  "test",
+  "staging",
+  "main",
+  "backup",
+  "new",
+  "old",
+  "bot",
+  "api",
+  "db",
+  "sql",
+  "panel",
+  "stack",
+  "instance",
+  "v1",
+  "v2",
+  "v3",
+]);
 
 function normalizeText(value: string): string {
   return value
@@ -138,6 +195,50 @@ function compact(s: string): string {
   return s.replace(/\s+/g, "");
 }
 
+function stripNoise(token: string): string {
+  let t = token.replace(/\d+$/g, "");
+  let changed = true;
+  while (changed && t.length > 3) {
+    changed = false;
+    for (const n of NOISE) {
+      if (t.length > n.length + 3 && t.endsWith(n)) {
+        t = t.slice(0, -n.length);
+        changed = true;
+        break;
+      }
+    }
+    for (const n of NOISE) {
+      if (t.length > n.length + 3 && t.startsWith(n)) {
+        t = t.slice(n.length);
+        changed = true;
+        break;
+      }
+    }
+  }
+  return t.replace(/\d+$/g, "");
+}
+
+/** True when a guest token clearly refers to the service key. */
+function tokenHitsKey(token: string, keyCompact: string): boolean {
+  if (!keyCompact || keyCompact.length < 3) return false;
+  if (token === keyCompact) return true;
+  const stripped = stripNoise(token);
+  if (stripped === keyCompact) return true;
+  // teamspeakserver, nextcloudapp
+  if (token.startsWith(keyCompact) && NOISE.has(token.slice(keyCompact.length))) return true;
+  if (stripped.startsWith(keyCompact) && stripped.length - keyCompact.length <= 2) return true;
+  // my-teamspeak style already split; also allow key inside longer token with noise around
+  if (
+    keyCompact.length >= 5 &&
+    token.includes(keyCompact) &&
+    token.length - keyCompact.length <= 8
+  ) {
+    const around = token.replace(keyCompact, "");
+    if (!around || /^[0-9]+$/.test(around) || NOISE.has(around)) return true;
+  }
+  return false;
+}
+
 /**
  * Resolve a service icon from guest name and/or Proxmox tags.
  * Returns null when the service is not clearly identifiable.
@@ -154,9 +255,11 @@ export function resolveServiceIcon(
     .map((t) => normalizeText(t))
     .filter(Boolean);
 
-  const nameTokens = tokensOf(nameNorm);
-  const allTokens = [...nameTokens, ...tagParts.flatMap(tokensOf)];
+  const nameTokens = tokensOf(nameNorm).filter((t) => !NOISE.has(t) && !/^\d+$/.test(t));
+  const rawNameTokens = tokensOf(nameNorm);
+  const allTokens = [...rawNameTokens, ...tagParts.flatMap(tokensOf)];
   const compactName = compact(nameNorm);
+  const strippedCompact = stripNoise(compactName);
 
   // Prefer longer keys to avoid "cloud" beating "nextcloud" etc.
   const ranked = ALIASES.flatMap((alias) =>
@@ -169,25 +272,29 @@ export function resolveServiceIcon(
     const strict = STRICT_ONLY.has(keyNorm) || keyNorm.length <= 3;
 
     // Exact name match
-    if (nameNorm === keyNorm || compactName === keyCompact) {
+    if (nameNorm === keyNorm || compactName === keyCompact || strippedCompact === keyCompact) {
       return { slug: alias.slug, label: alias.label };
     }
 
     // Exact tag match (tags are intentional labels — allow short keys)
-    if (tagParts.some((t) => t === keyNorm || compact(t) === keyCompact)) {
+    if (tagParts.some((t) => t === keyNorm || compact(t) === keyCompact || stripNoise(compact(t)) === keyCompact)) {
       return { slug: alias.slug, label: alias.label };
     }
 
     if (strict) {
-      // Short / ambiguous: only exact name or exact single-token name
-      if (nameTokens.length === 1 && (nameTokens[0] === keyNorm || nameTokens[0] === keyCompact)) {
+      if (
+        nameTokens.length === 1 &&
+        (nameTokens[0] === keyNorm ||
+          nameTokens[0] === keyCompact ||
+          stripNoise(nameTokens[0]) === keyCompact)
+      ) {
         return { slug: alias.slug, label: alias.label };
       }
       continue;
     }
 
-    // Whole-word / whole-token in name
-    if (nameTokens.includes(keyNorm) || nameTokens.includes(keyCompact)) {
+    // Token hit: "teamspeak-server", "ct-nextcloud-01", "TeamSpeakServer"
+    if (allTokens.some((t) => tokenHitsKey(t, keyCompact) || tokenHitsKey(t, keyNorm))) {
       return { slug: alias.slug, label: alias.label };
     }
 
@@ -197,17 +304,22 @@ export function resolveServiceIcon(
       if (re.test(nameNorm)) return { slug: alias.slug, label: alias.label };
     }
 
-    // Compact form inside a single token (e.g. ct-nextcloud-01 → nextcloud)
-    if (
-      keyCompact.length >= 5 &&
-      allTokens.some((t) => t === keyCompact || t.includes(keyCompact))
-    ) {
-      // Require the key to be a clear segment: start, end, or bounded by digits
-      const segment = new RegExp(
-        `(^|[^a-z])${escapeRegExp(keyCompact)}([^a-z]|$)`,
-      );
-      if (segment.test(compactName) || allTokens.some((t) => segment.test(t))) {
+    // Compact whole-name contains key with light noise (teamspeakserver, srvnextcloud)
+    if (keyCompact.length >= 4) {
+      if (tokenHitsKey(compactName, keyCompact) || tokenHitsKey(strippedCompact, keyCompact)) {
         return { slug: alias.slug, label: alias.label };
+      }
+      const re = new RegExp(escapeRegExp(keyCompact), "i");
+      if (re.test(compactName)) {
+        const rest = compactName.replace(keyCompact, "");
+        if (!rest || /^[0-9]+$/.test(rest) || NOISE.has(rest) || [...NOISE].some((n) => rest === n || rest === `${n}${n}`)) {
+          return { slug: alias.slug, label: alias.label };
+        }
+        // rest is combination of noise words only
+        const restTokens = rest.match(/[a-z]+|[0-9]+/gi) || [];
+        if (restTokens.every((p) => NOISE.has(p) || /^\d+$/.test(p))) {
+          return { slug: alias.slug, label: alias.label };
+        }
       }
     }
   }
@@ -217,6 +329,136 @@ export function resolveServiceIcon(
 
 export function serviceIconUrl(slug: string): string {
   return `${CDN}/${encodeURIComponent(slug)}.svg`;
+}
+
+export type ServiceIconSuggestion = ServiceIconMatch & {
+  /** Higher = more likely */
+  score: number;
+  reason: string;
+};
+
+function sharedPrefixLen(a: string, b: string): number {
+  const n = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < n && a[i] === b[i]) i++;
+  return i;
+}
+
+/**
+ * Fuzzy suggestions for the logo picker — even when auto-detect finds nothing confident.
+ * Ranked by how well the guest name/tags resemble known services.
+ */
+export function suggestServiceIcons(
+  name?: string | null,
+  tags?: string | null,
+  limit = 8,
+): ServiceIconSuggestion[] {
+  const nameNorm = normalizeText(name || "");
+  const tagParts = (tags || "")
+    .split(/[;,]/)
+    .map((t) => normalizeText(t))
+    .filter(Boolean);
+  if (!nameNorm && tagParts.length === 0) return [];
+
+  const rawTokens = [
+    ...tokensOf(nameNorm),
+    ...tagParts.flatMap(tokensOf),
+  ].filter((t) => !/^\d+$/.test(t));
+  const usefulTokens = rawTokens
+    .filter((t) => !NOISE.has(t))
+    .map((t) => stripNoise(t))
+    .filter((t) => t.length >= 2);
+  const compactName = stripNoise(compact(nameNorm));
+  const hay = `${nameNorm} ${tagParts.join(" ")} ${compactName}`.toLowerCase();
+
+  const confident = resolveServiceIcon(name, tags);
+  const bySlug = new Map<string, ServiceIconSuggestion>();
+
+  const consider = (alias: Alias, score: number, reason: string) => {
+    if (score < 12) return;
+    const prev = bySlug.get(alias.slug);
+    if (!prev || score > prev.score) {
+      bySlug.set(alias.slug, {
+        slug: alias.slug,
+        label: alias.label,
+        score,
+        reason,
+      });
+    }
+  };
+
+  for (const alias of ALIASES) {
+    for (const key of alias.keys) {
+      const keyNorm = normalizeText(key);
+      const keyCompact = compact(keyNorm);
+      if (keyCompact.length < 2) continue;
+
+      if (confident?.slug === alias.slug) {
+        consider(alias, 100, "Best match for this name");
+        break;
+      }
+
+      // Exact token / phrase
+      if (usefulTokens.includes(keyNorm) || usefulTokens.includes(keyCompact)) {
+        consider(alias, 90, `Name contains “${keyNorm}”`);
+        continue;
+      }
+      if (compactName === keyCompact) {
+        consider(alias, 92, "Matches the name exactly");
+        continue;
+      }
+      if (tokenHitsKey(compactName, keyCompact) || usefulTokens.some((t) => tokenHitsKey(t, keyCompact))) {
+        consider(alias, 85, `Looks like “${alias.label}”`);
+        continue;
+      }
+
+      // Substring in haystack (ts in teamspeak is weak — require key length)
+      if (keyCompact.length >= 4 && hay.includes(keyCompact)) {
+        consider(alias, 70, `Name includes “${keyNorm}”`);
+        continue;
+      }
+      if (keyNorm.includes(" ") && hay.includes(keyNorm)) {
+        consider(alias, 75, `Name includes “${keyNorm}”`);
+        continue;
+      }
+
+      // Prefix / starts-with between name tokens and keys
+      for (const token of usefulTokens) {
+        if (token.length < 3 || keyCompact.length < 3) continue;
+        if (keyCompact.startsWith(token) && token.length >= 4) {
+          consider(alias, 40 + token.length, `“${token}…” could be ${alias.label}`);
+        } else if (token.startsWith(keyCompact) && keyCompact.length >= 4) {
+          consider(alias, 55 + keyCompact.length, `Starts like ${alias.label}`);
+        } else {
+          const pref = sharedPrefixLen(token, keyCompact);
+          const minLen = Math.min(token.length, keyCompact.length);
+          if (pref >= 4 && pref / minLen >= 0.6) {
+            consider(alias, 25 + pref * 3, `Similar to ${alias.label}`);
+          }
+        }
+      }
+
+      // Compact name shares long prefix with key
+      if (compactName.length >= 4 && keyCompact.length >= 4) {
+        const pref = sharedPrefixLen(compactName, keyCompact);
+        if (pref >= 5) {
+          consider(alias, 30 + pref * 2, `Similar to ${alias.label}`);
+        }
+      }
+
+      // Label word overlap (e.g. name "guard" → AdGuard Home)
+      const labelTokens = tokensOf(alias.label).filter((t) => t.length >= 4 && !NOISE.has(t));
+      for (const lt of labelTokens) {
+        if (usefulTokens.includes(lt) || compactName.includes(lt)) {
+          consider(alias, 48, `Related to “${lt}”`);
+        }
+      }
+    }
+  }
+
+  return [...bySlug.values()]
+    .sort((a, b) => b.score - a.score || a.label.localeCompare(b.label))
+    .slice(0, limit);
 }
 
 /** Unique catalog entries for the logo picker (slug + label). */
