@@ -2,16 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { Header } from "../components/Header";
 import { GuestCard } from "../components/GuestCard";
-import { MetricBar } from "../components/MetricBar";
-import { StatusBadge } from "../components/StatusBadge";
 import { UpdateBanner } from "../components/UpdateBanner";
 import { useGuestRates, useResources } from "../hooks";
-import {
-  cpuPct,
-  formatBytes,
-  formatUptime,
-  usagePct,
-} from "../format";
+import { cpuPct } from "../format";
 import type { ClusterResource, GuestType } from "../types";
 
 const FILTERS_KEY = "proxpanel.overview.filters";
@@ -101,10 +94,6 @@ export default function Dashboard() {
     requestAnimationFrame(() => scrollToId("overview-guests"));
   }
 
-  function focusNodes() {
-    requestAnimationFrame(() => scrollToId("overview-nodes"));
-  }
-
   return (
     <div>
       <Header
@@ -134,8 +123,7 @@ export default function Dashboard() {
           <Stat
             title="Nodes"
             value={String(view.nodes.length)}
-            hint="in cluster · click to jump"
-            onClick={focusNodes}
+            hint="in cluster · see sidebar"
           />
           <Stat
             title="CPU Cluster"
@@ -236,15 +224,6 @@ export default function Dashboard() {
             </div>
           )}
         </section>
-
-        <section id="overview-nodes" className="scroll-mt-28 md:scroll-mt-32">
-          <h2 className="mb-3 text-sm font-medium text-muted">Nodes</h2>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {view.nodes.map((node) => (
-              <NodeCard key={node.id} node={node} />
-            ))}
-          </div>
-        </section>
       </div>
     </div>
   );
@@ -313,32 +292,4 @@ function avgCpu(nodes: ClusterResource[]): string {
   if (!nodes.length) return "—";
   const avg = nodes.reduce((s, n) => s + (n.cpu || 0), 0) / nodes.length;
   return `${cpuPct(avg).toFixed(1)} %`;
-}
-
-function NodeCard({ node }: { node: ClusterResource }) {
-  return (
-    <article className="rounded-xl border border-line bg-surface px-4 py-3">
-      <div className="mb-2.5 flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className="truncate font-medium">{node.node}</div>
-          <div className="text-[11px] text-muted">{formatUptime(node.uptime)}</div>
-        </div>
-        <StatusBadge
-          status={node.status === "unknown" ? "offline" : node.status || "online"}
-        />
-      </div>
-      <div className="space-y-2">
-        <MetricBar
-          label="CPU"
-          percent={cpuPct(node.cpu)}
-          detail={`${cpuPct(node.cpu).toFixed(0)}%`}
-        />
-        <MetricBar
-          label="RAM"
-          percent={usagePct(node.mem, node.maxmem)}
-          detail={`${formatBytes(node.mem)}`}
-        />
-      </div>
-    </article>
-  );
 }

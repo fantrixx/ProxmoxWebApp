@@ -9,6 +9,9 @@ import {
   MonitorSmartphone,
 } from "lucide-react";
 import { AppVersionLabel } from "./AppVersion";
+import { useResources } from "../hooks";
+import { cpuPct, formatBytes, formatUptime, usagePct } from "../format";
+import type { ClusterResource } from "../types";
 
 const desktopItems = [
   { to: "/", label: "Overview", icon: LayoutDashboard, exact: true },
@@ -61,13 +64,108 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <div className="space-y-1 px-5 py-4 text-[11px] text-muted">
-        <p>Live data every 3 seconds</p>
-        <p className="font-mono">
-          <AppVersionLabel showCommit />
-        </p>
+      <div className="border-t border-line px-3 py-3">
+        <SidebarNodes />
+        <div className="mt-3 space-y-0.5 px-2 text-[11px] text-muted">
+          <p>Live data every 3 seconds</p>
+          <p className="font-mono">
+            <AppVersionLabel showCommit />
+          </p>
+        </div>
       </div>
     </aside>
+  );
+}
+
+function SidebarNodes() {
+  const q = useResources();
+  const nodes = (q.data?.resources || []).filter((r) => r.type === "node");
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between px-2">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-muted">
+          Nodes
+        </p>
+        {nodes.length > 0 ? (
+          <span className="text-[11px] text-muted">{nodes.length}</span>
+        ) : null}
+      </div>
+      {q.isLoading && !nodes.length ? (
+        <p className="px-2 text-[11px] text-muted">Loading…</p>
+      ) : nodes.length === 0 ? (
+        <p className="px-2 text-[11px] text-muted">No nodes</p>
+      ) : (
+        <ul className="max-h-48 space-y-2 overflow-y-auto pr-0.5">
+          {nodes.map((node) => (
+            <SidebarNodeRow key={node.id} node={node} />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function SidebarNodeRow({ node }: { node: ClusterResource }) {
+  const online = node.status !== "unknown" && node.status !== "offline";
+  const cpu = cpuPct(node.cpu);
+  const ram = usagePct(node.mem, node.maxmem);
+
+  return (
+    <li className="rounded-xl border border-line/80 bg-surface/50 px-2.5 py-2">
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span
+            className={`size-1.5 shrink-0 rounded-full ${
+              online ? "bg-good" : "bg-bad"
+            }`}
+            aria-hidden
+          />
+          <span className="truncate text-xs font-medium">{node.node}</span>
+        </div>
+        <span className="shrink-0 text-[10px] text-muted">
+          {formatUptime(node.uptime)}
+        </span>
+      </div>
+      <MiniBar label="CPU" percent={cpu} detail={`${cpu.toFixed(0)}%`} />
+      <MiniBar
+        label="RAM"
+        percent={ram}
+        detail={formatBytes(node.mem)}
+        className="mt-1"
+      />
+    </li>
+  );
+}
+
+function MiniBar({
+  label,
+  percent,
+  detail,
+  className = "",
+}: {
+  label: string;
+  percent: number;
+  detail: string;
+  className?: string;
+}) {
+  const clamped = Math.min(100, Math.max(0, percent));
+  const tone =
+    clamped >= 90 ? "bg-bad" : clamped >= 75 ? "bg-warn" : "bg-good";
+
+  return (
+    <div className={className}>
+      <div className="mb-0.5 flex items-baseline justify-between gap-2 text-[10px]">
+        <span className="text-muted">{label}</span>
+        <span className="font-mono text-ink/80">{detail}</span>
+      </div>
+      <div className="h-1 overflow-hidden rounded-full bg-bg">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${tone}`}
+          style={{ width: `${clamped}%` }}
+        />
+      </div>
+    </div>
   );
 }
 
