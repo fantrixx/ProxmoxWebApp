@@ -30,7 +30,7 @@ export default function GuestList({ kind }: { kind: GuestType }) {
     <div>
       <Header
         title={title}
-        subtitle={`${running} of ${guests.length} running`}
+        subtitle={`${running} running · ${guests.length} total`}
       />
       <div className="px-4 py-4 md:px-8 md:py-6">
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">

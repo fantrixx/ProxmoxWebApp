@@ -122,10 +122,9 @@ export default function Dashboard() {
         ) : null}
 
         <section className="grid gap-4 md:grid-cols-2">
-          <Stat
-            title="Guests"
-            value={`${view.running} / ${view.guests.length}`}
-            hint="running / total · click to show running"
+          <GuestRunningStat
+            running={view.running}
+            total={view.guests.length}
             onClick={focusGuestsRunning}
           />
           <Stat
@@ -253,6 +252,42 @@ function KindChip({
       }`}
     >
       {children}
+    </button>
+  );
+}
+
+function GuestRunningStat({
+  running,
+  total,
+  onClick,
+}: {
+  running: number;
+  total: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-2xl border border-line bg-surface p-5 text-left transition hover:border-line-2 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+    >
+      <div className="text-xs text-muted">Guests</div>
+      <div className="mt-1 flex items-end gap-4">
+        <div>
+          <div className="text-3xl font-semibold tracking-tight text-good tabular-nums">
+            {running}
+          </div>
+          <div className="mt-0.5 text-xs font-medium text-good/80">running</div>
+        </div>
+        <div className="mb-0.5 h-8 w-px shrink-0 bg-line" aria-hidden />
+        <div>
+          <div className="text-2xl font-semibold tracking-tight tabular-nums text-ink/90">
+            {total}
+          </div>
+          <div className="mt-0.5 text-xs text-muted">total</div>
+        </div>
+      </div>
+      <div className="mt-2 text-xs text-muted">Click to show running only</div>
     </button>
   );
 }
