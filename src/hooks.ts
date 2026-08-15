@@ -5,6 +5,39 @@ import type { ClusterResource, GuestRates } from "./types";
 import { useApp } from "./context";
 import { setPendingGuestAction } from "./pendingGuest";
 
+/**
+ * Extra bottom inset when mobile browser chrome (e.g. Safari toolbar)
+ * covers the bottom of the layout viewport.
+ */
+export function useBottomChromeInset() {
+  const [inset, setInset] = useState(0);
+
+  useEffect(() => {
+    const sync = () => {
+      const vv = window.visualViewport;
+      if (!vv) {
+        setInset(0);
+        return;
+      }
+      const covered = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+      setInset(covered);
+    };
+
+    sync();
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", sync);
+    vv?.addEventListener("scroll", sync);
+    window.addEventListener("resize", sync);
+    return () => {
+      vv?.removeEventListener("resize", sync);
+      vv?.removeEventListener("scroll", sync);
+      window.removeEventListener("resize", sync);
+    };
+  }, []);
+
+  return inset;
+}
+
 export function useGuestRates(resources: ClusterResource[] | undefined) {
   const [rates, setRates] = useState<Map<string, GuestRates>>(() => new Map());
   const prev = useRef(

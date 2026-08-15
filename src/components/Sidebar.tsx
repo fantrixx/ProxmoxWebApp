@@ -211,7 +211,13 @@ export function MobileTabBar() {
   const { pathname } = useLocation();
 
   return (
-    <nav className="shrink-0 border-t border-line bg-bg-2 pb-[env(safe-area-inset-bottom)] md:hidden">
+    <nav
+      className="shrink-0 border-t border-line bg-bg-2 md:hidden"
+      style={{
+        paddingBottom:
+          "max(0.5rem, env(safe-area-inset-bottom, 0px), var(--prox-chrome-inset, 0px))",
+      }}
+    >
       <div className="grid grid-cols-5">
         {mobileItems.map((item) => {
           const Icon = item.icon;
@@ -220,7 +226,7 @@ export function MobileTabBar() {
             <Link
               key={item.to}
               to={item.to}
-              className={`flex min-h-14 flex-col items-center justify-center gap-1 text-[11px] ${
+              className={`flex min-h-12 flex-col items-center justify-center gap-1 text-[11px] ${
                 active ? "text-accent" : "text-muted"
               }`}
             >
