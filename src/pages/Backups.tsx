@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownUp, CalendarClock, HardDriveDownload, Search, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { dataApi } from "../api";
 import { Header } from "../components/Header";
+import { BackupDialog } from "../components/BackupDialog";
 import { GuestTypeIcon } from "../components/GuestTypeIcon";
 import { StatusBadge } from "../components/StatusBadge";
 import { formatBytes, formatSnapTime, guestLabel } from "../format";
@@ -26,10 +27,12 @@ function formatLabel(item: MediaItem | null | undefined): string {
 }
 
 export default function BackupsPage() {
+  const qc = useQueryClient();
   const [kind, setKind] = useState<KindFilter>("all");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [qtext, setQtext] = useState("");
   const [selected, setSelected] = useState<BackupOverviewGuest | null>(null);
+  const [backupTarget, setBackupTarget] = useState<BackupOverviewGuest | null>(null);
 
   const q = useQuery({
     queryKey: ["backupsOverview"],
@@ -60,6 +63,17 @@ export default function BackupsPage() {
   const withSchedule = (q.data?.guests || []).filter(
     (g) => g.enabledBackupScheduleCount > 0,
   ).length;
+
+  function openBackupNow(guest: BackupOverviewGuest) {
+    setSelected(null);
+    setBackupTarget(guest);
+  }
+
+  function closeBackupDialog() {
+    setBackupTarget(null);
+    void qc.invalidateQueries({ queryKey: ["backupsOverview"] });
+    void qc.invalidateQueries({ queryKey: ["guestBackups"] });
+  }
 
   return (
     <div className="max-w-full overflow-x-hidden">
@@ -113,7 +127,7 @@ export default function BackupsPage() {
           <p className="text-sm text-muted">No guests match these filters.</p>
         ) : (
           <>
-            <div className="mb-2 hidden text-[11px] text-muted md:grid md:grid-cols-[minmax(0,1.3fr)_4.5rem_7rem_minmax(0,1fr)_4.5rem_5.5rem_minmax(0,0.9fr)] md:gap-3 md:px-3">
+            <div className="mb-2 hidden text-[11px] text-muted lg:grid lg:grid-cols-[minmax(0,1.15fr)_3.5rem_6.5rem_minmax(0,0.9fr)_4rem_5rem_minmax(0,0.75fr)_7rem] lg:gap-3 lg:px-3">
               <span>Guest</span>
               <span>Type</span>
               <span>Last backup</span>
@@ -121,91 +135,16 @@ export default function BackupsPage() {
               <span>Format</span>
               <span>Size</span>
               <span>Location</span>
+              <span className="text-right">Action</span>
             </div>
             <ul className="max-w-full divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
               {rows.map((row) => (
-                <li key={`${row.type}-${row.node}-${row.vmid}`} className="min-w-0">
-                  <button
-                    type="button"
-                    onClick={() => setSelected(row)}
-                    className="grid w-full min-w-0 cursor-pointer gap-2 overflow-hidden px-3 py-3 text-left transition hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40 md:grid-cols-[minmax(0,1.3fr)_4.5rem_7rem_minmax(0,1fr)_4.5rem_5.5rem_minmax(0,0.9fr)] md:items-center md:gap-3"
-                  >
-                    <div className="min-w-0 overflow-hidden">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <GuestTypeIcon type={row.type} className="size-3.5 shrink-0" />
-                        <span className="truncate font-medium">{row.name}</span>
-                      </div>
-                      <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-muted">
-                        <span className="truncate">
-                          {guestLabel(row.type)} {row.vmid} · {row.node}
-                        </span>
-                        <StatusBadge status={row.status} />
-                      </div>
-                    </div>
-
-                    {/* Mobile summary */}
-                    <div className="min-w-0 space-y-1 text-xs text-muted md:hidden">
-                      <div className="flex min-w-0 justify-between gap-3">
-                        <span>Last backup</span>
-                        <span className="truncate text-ink">
-                          {row.lastBackup?.ctime
-                            ? formatSnapTime(row.lastBackup.ctime)
-                            : "Never"}
-                        </span>
-                      </div>
-                      <div className="flex min-w-0 items-start justify-between gap-3">
-                        <span>Schedule</span>
-                        <ScheduleBadge guest={row} align="end" />
-                      </div>
-                      <div className="flex min-w-0 justify-between gap-3">
-                        <span>Format / size</span>
-                        <span className="truncate font-mono text-ink/90">
-                          {formatLabel(row.lastBackup)}
-                          {row.lastBackup ? ` · ${formatBytes(row.lastBackup.size)}` : ""}
-                        </span>
-                      </div>
-                      <div className="flex min-w-0 justify-between gap-3">
-                        <span>Where</span>
-                        <span className="truncate font-mono text-ink/90">
-                          {row.lastBackup
-                            ? `${row.lastBackup.storage}${
-                                row.lastBackup.node ? ` @ ${row.lastBackup.node}` : ""
-                              }`
-                            : "—"}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Desktop columns */}
-                    <div className="hidden min-w-0 md:block md:text-sm">{guestLabel(row.type)}</div>
-                    <div className="hidden min-w-0 truncate md:block md:text-sm">
-                      {row.lastBackup?.ctime
-                        ? formatSnapTime(row.lastBackup.ctime)
-                        : "Never"}
-                    </div>
-                    <div className="hidden min-w-0 md:block">
-                      <ScheduleBadge guest={row} />
-                    </div>
-                    <div className="hidden min-w-0 truncate font-mono text-ink/80 md:block md:text-xs">
-                      {formatLabel(row.lastBackup)}
-                    </div>
-                    <div className="hidden min-w-0 truncate font-mono md:block md:text-sm">
-                      {row.lastBackup ? formatBytes(row.lastBackup.size) : "—"}
-                    </div>
-                    <div className="hidden min-w-0 truncate text-sm md:block">
-                      {row.lastBackup ? (
-                        <>
-                          <span className="font-mono text-ink/80">
-                            {row.lastBackup.storage}
-                          </span>
-                          {row.lastBackup.node ? ` @ ${row.lastBackup.node}` : ""}
-                        </>
-                      ) : (
-                        "—"
-                      )}
-                    </div>
-                  </button>
-                </li>
+                <BackupRow
+                  key={`${row.type}-${row.node}-${row.vmid}`}
+                  row={row}
+                  onOpenDetails={() => setSelected(row)}
+                  onBackupNow={() => openBackupNow(row)}
+                />
               ))}
             </ul>
           </>
@@ -213,9 +152,124 @@ export default function BackupsPage() {
       </div>
 
       {selected ? (
-        <BackupOverviewDialog guest={selected} onClose={() => setSelected(null)} />
+        <BackupOverviewDialog
+          guest={selected}
+          onClose={() => setSelected(null)}
+          onBackupNow={() => openBackupNow(selected)}
+        />
+      ) : null}
+
+      {backupTarget ? (
+        <BackupDialog
+          open
+          onClose={closeBackupDialog}
+          node={backupTarget.node}
+          type={backupTarget.type}
+          vmid={backupTarget.vmid}
+          name={backupTarget.name}
+        />
       ) : null}
     </div>
+  );
+}
+
+function BackupRow({
+  row,
+  onOpenDetails,
+  onBackupNow,
+}: {
+  row: BackupOverviewGuest;
+  onOpenDetails: () => void;
+  onBackupNow: () => void;
+}) {
+  return (
+    <li className="min-w-0">
+      <div className="flex min-w-0 flex-col gap-3 px-3 py-3 transition hover:bg-surface-2/50 lg:grid lg:grid-cols-[minmax(0,1.15fr)_3.5rem_6.5rem_minmax(0,0.9fr)_4rem_5rem_minmax(0,0.75fr)_7rem] lg:items-center lg:gap-3">
+        <button
+          type="button"
+          onClick={onOpenDetails}
+          className="min-w-0 cursor-pointer overflow-hidden text-left lg:contents"
+        >
+          <div className="min-w-0 overflow-hidden">
+            <div className="flex min-w-0 items-center gap-2">
+              <GuestTypeIcon type={row.type} className="size-3.5 shrink-0" />
+              <span className="truncate font-medium">{row.name}</span>
+            </div>
+            <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-muted">
+              <span className="truncate">
+                {guestLabel(row.type)} {row.vmid} · {row.node}
+              </span>
+              <StatusBadge status={row.status} />
+            </div>
+          </div>
+
+          <div className="mt-2 min-w-0 space-y-1 text-xs text-muted lg:hidden">
+            <div className="flex min-w-0 justify-between gap-3">
+              <span>Last backup</span>
+              <span className="truncate text-ink">
+                {row.lastBackup?.ctime ? formatSnapTime(row.lastBackup.ctime) : "Never"}
+              </span>
+            </div>
+            <div className="flex min-w-0 items-start justify-between gap-3">
+              <span>Schedule</span>
+              <ScheduleBadge guest={row} align="end" />
+            </div>
+            <div className="flex min-w-0 justify-between gap-3">
+              <span>Format / size</span>
+              <span className="truncate font-mono text-ink/90">
+                {formatLabel(row.lastBackup)}
+                {row.lastBackup ? ` · ${formatBytes(row.lastBackup.size)}` : ""}
+              </span>
+            </div>
+            <div className="flex min-w-0 justify-between gap-3">
+              <span>Where</span>
+              <span className="truncate font-mono text-ink/90">
+                {row.lastBackup
+                  ? `${row.lastBackup.storage}${
+                      row.lastBackup.node ? ` @ ${row.lastBackup.node}` : ""
+                    }`
+                  : "—"}
+              </span>
+            </div>
+          </div>
+
+          <div className="hidden min-w-0 lg:block lg:text-sm">{guestLabel(row.type)}</div>
+          <div className="hidden min-w-0 truncate lg:block lg:text-sm">
+            {row.lastBackup?.ctime ? formatSnapTime(row.lastBackup.ctime) : "Never"}
+          </div>
+          <div className="hidden min-w-0 lg:block">
+            <ScheduleBadge guest={row} />
+          </div>
+          <div className="hidden min-w-0 truncate font-mono text-ink/80 lg:block lg:text-xs">
+            {formatLabel(row.lastBackup)}
+          </div>
+          <div className="hidden min-w-0 truncate font-mono lg:block lg:text-sm">
+            {row.lastBackup ? formatBytes(row.lastBackup.size) : "—"}
+          </div>
+          <div className="hidden min-w-0 truncate text-sm lg:block">
+            {row.lastBackup ? (
+              <>
+                <span className="font-mono text-ink/80">{row.lastBackup.storage}</span>
+                {row.lastBackup.node ? ` @ ${row.lastBackup.node}` : ""}
+              </>
+            ) : (
+              "—"
+            )}
+          </div>
+        </button>
+
+        <div className="flex shrink-0 lg:justify-end">
+          <button
+            type="button"
+            onClick={onBackupNow}
+            className="inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-accent/40 bg-accent/10 px-3 text-xs font-medium text-accent hover:bg-accent/20 lg:min-h-0 lg:w-auto lg:py-1.5"
+          >
+            <HardDriveDownload className="size-3.5" />
+            Backup now
+          </button>
+        </div>
+      </div>
+    </li>
   );
 }
 
@@ -282,9 +336,11 @@ function ScheduleBadge({
 function BackupOverviewDialog({
   guest,
   onClose,
+  onBackupNow,
 }: {
   guest: BackupOverviewGuest;
   onClose: () => void;
+  onBackupNow: () => void;
 }) {
   const backup = guest.lastBackup;
   const history = useQuery({
@@ -428,11 +484,19 @@ function BackupOverviewDialog({
           </button>
           <Link
             to={`/guest/${guest.type}/${encodeURIComponent(guest.node)}/${guest.vmid}`}
-            className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-medium text-black hover:bg-accent-2 sm:min-h-0"
+            className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-lg border border-line px-4 py-2 text-sm hover:bg-surface-2 sm:min-h-0"
             onClick={onClose}
           >
             Open guest
           </Link>
+          <button
+            type="button"
+            onClick={onBackupNow}
+            className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-black hover:bg-accent-2 sm:min-h-0"
+          >
+            <HardDriveDownload className="size-3.5" />
+            Backup now
+          </button>
         </div>
       </div>
     </div>
