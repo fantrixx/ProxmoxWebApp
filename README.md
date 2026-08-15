@@ -76,8 +76,9 @@ The UI also checks GitHub for newer versions and shows an update hint on login a
 - Active job progress under the header (multi-job aware)
 - Progress feedback on the guest card while a backup runs
 
-### Power schedules
-- Plan start / shut down / stop per guest
+### Schedules
+- Plan start / shut down / stop / backup per guest
+- Backup schedules support storage, mode (snapshot recommended), and compression
 - Create, edit, pause, and delete from a dedicated dialog
 - Scrollable schedule list with last-run time
 - Survives reboot when you use an API token in `.env`

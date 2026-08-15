@@ -134,6 +134,10 @@ export type MediaItem = {
 
 export type BackupStorage = { node: string; storage: string; shared?: number };
 
+export type ScheduleAction = "start" | "shutdown" | "stop" | "backup";
+export type BackupMode = "snapshot" | "suspend" | "stop";
+export type BackupCompress = "zstd" | "gzip" | "lzo" | "0";
+
 export type PowerSchedule = {
   id: string;
   node: string;
@@ -141,9 +145,15 @@ export type PowerSchedule = {
   vmid: number;
   name?: string;
   enabled: boolean;
-  action: "start" | "shutdown" | "stop";
+  action: ScheduleAction;
   time: string;
   days: number[];
+  /** Required when action is backup — vzdump target storage */
+  storage?: string;
+  /** vzdump mode; defaults to snapshot (live backup) */
+  backupMode?: BackupMode;
+  /** vzdump compression; defaults to zstd ("0" = none) */
+  compress?: BackupCompress;
   lastRunKey?: string;
   /** Unix epoch seconds of last successful run */
   lastRunAt?: number;

@@ -2,7 +2,9 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { pveRequest, unwrapUpid } from "./proxmox.ts";
 import {
   deleteSchedule,
+  isScheduleAction,
   listSchedules,
+  normalizeBackupFields,
   upsertSchedule,
   type PowerSchedule,
 } from "./schedules.ts";
@@ -742,6 +744,20 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
         res.status(400).json({ error: "Invalid type." });
         return;
       }
+      if (!isScheduleAction(body.action)) {
+        res.status(400).json({ error: "Invalid action." });
+        return;
+      }
+      const backupFields = normalizeBackupFields({
+        action: body.action,
+        storage: body.storage,
+        backupMode: body.backupMode,
+        compress: body.compress,
+      });
+      if ("error" in backupFields) {
+        res.status(400).json({ error: backupFields.error });
+        return;
+      }
       const existing = (await listSchedules()).find((s) => s.id === body.id);
       const schedule: PowerSchedule = {
         id: body.id || crypto.randomUUID(),
@@ -753,6 +769,7 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
         action: body.action,
         time: body.time,
         days: Array.isArray(body.days) ? body.days : [],
+        ...backupFields,
         lastRunKey: body.lastRunKey ?? existing?.lastRunKey,
         lastRunAt: body.lastRunAt ?? existing?.lastRunAt,
       };

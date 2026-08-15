@@ -9,21 +9,15 @@ import {
   lastRunLabel,
   sortSchedules,
 } from "./ScheduleList";
+import {
+  ScheduleFormFields,
+  buildSchedulePayload,
+  emptyScheduleForm,
+  type ScheduleFormState,
+} from "./ScheduleFormFields";
 import { useApp } from "../context";
 import { newId } from "../id";
 import type { GuestType, PowerSchedule } from "../types";
-
-const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-const emptyForm = (): Omit<PowerSchedule, "id"> & { id?: string } => ({
-  node: "",
-  type: "lxc",
-  vmid: 0,
-  enabled: true,
-  action: "start",
-  time: "08:00",
-  days: [],
-});
 
 export function ScheduleDialog({
   open,
@@ -46,7 +40,7 @@ export function ScheduleDialog({
   const [mode, setMode] = useState<"list" | "form">("list");
   const [editing, setEditing] = useState<PowerSchedule | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [form, setForm] = useState(emptyForm());
+  const [form, setForm] = useState<ScheduleFormState>(emptyScheduleForm());
 
   const list = useQuery({
     queryKey: ["schedules"],
@@ -67,7 +61,7 @@ export function ScheduleDialog({
       setMode("list");
       setEditing(null);
       setDeleteId(null);
-      setForm(emptyForm());
+      setForm(emptyScheduleForm());
     }
   }, [open]);
 
@@ -90,7 +84,7 @@ export function ScheduleDialog({
   function openCreate() {
     setEditing(null);
     setForm({
-      ...emptyForm(),
+      ...emptyScheduleForm(),
       node,
       type,
       vmid: vmidNum,
@@ -101,14 +95,20 @@ export function ScheduleDialog({
 
   function openEdit(schedule: PowerSchedule) {
     setEditing(schedule);
-    setForm({ ...schedule });
+    setForm({
+      ...emptyScheduleForm(),
+      ...schedule,
+      storage: schedule.storage || "",
+      backupMode: schedule.backupMode || "snapshot",
+      compress: schedule.compress || "zstd",
+    });
     setMode("form");
   }
 
   function backToList() {
     setMode("list");
     setEditing(null);
-    setForm(emptyForm());
+    setForm(emptyScheduleForm());
   }
 
   function invalidate() {
@@ -117,19 +117,16 @@ export function ScheduleDialog({
 
   const save = useMutation({
     mutationFn: () => {
-      const schedule: PowerSchedule = {
-        id: editing?.id || newId(),
-        node: form.node || node,
-        type: (form.type as GuestType) || type,
-        vmid: Number(form.vmid) || vmidNum,
-        name: form.name || name,
-        enabled: form.enabled,
-        action: form.action,
-        time: form.time,
-        days: form.days,
-        lastRunKey: editing?.lastRunKey,
-        lastRunAt: editing?.lastRunAt,
-      };
+      const schedule = buildSchedulePayload(form, editing, {
+        node,
+        type,
+        vmid: vmidNum,
+        name,
+      });
+      schedule.id = editing?.id || newId();
+      if (schedule.action === "backup" && !schedule.storage) {
+        return Promise.reject(new Error("Select a backup storage first."));
+      }
       return dataApi.saveSchedule(schedule);
     },
     onSuccess: () => {
@@ -160,16 +157,7 @@ export function ScheduleDialog({
     onError: (err: Error) => toast("err", err.message),
   });
 
-  const allDays = form.days.length === 0;
   const busy = save.isPending || remove.isPending || toggle.isPending;
-
-  function toggleDay(day: number) {
-    setForm((f) => {
-      const has = f.days.includes(day);
-      const days = has ? f.days.filter((d) => d !== day) : [...f.days, day].sort();
-      return { ...f, days };
-    });
-  }
 
   if (!open) return null;
 
@@ -187,7 +175,7 @@ export function ScheduleDialog({
                   ? editing
                     ? "Edit schedule"
                     : "New schedule"
-                  : "Power schedules"}
+                  : "Schedules"}
               </h2>
               <p className="mt-0.5 truncate text-sm text-muted">
                 {title} · {type === "lxc" ? "CT" : "VM"} {vmid}
@@ -251,7 +239,8 @@ export function ScheduleDialog({
 
               <p className="mt-3 shrink-0 text-[11px] leading-relaxed text-muted">
                 ProxPanel must keep running. Use an API token in <code>.env</code> so
-                schedules survive reboot.
+                schedules survive reboot. Backup schedules need VM.Backup and storage
+                space permissions.
               </p>
             </>
           ) : (
@@ -263,59 +252,12 @@ export function ScheduleDialog({
               }}
             >
               <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label>
-                    <span className="mb-1.5 block text-xs text-muted">Action</span>
-                    <select
-                      value={form.action}
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          action: e.target.value as PowerSchedule["action"],
-                        }))
-                      }
-                      className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-base outline-none focus:border-accent md:text-sm"
-                    >
-                      <option value="start">Start</option>
-                      <option value="shutdown">Shut down</option>
-                      <option value="stop">Stop</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span className="mb-1.5 block text-xs text-muted">Time</span>
-                    <input
-                      type="time"
-                      value={form.time}
-                      onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))}
-                      className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-base outline-none focus:border-accent md:text-sm"
-                      required
-                    />
-                  </label>
-                </div>
-
-                <div>
-                  <span className="mb-2 block text-xs text-muted">Days</span>
-                  <div className="flex flex-wrap gap-2">
-                    <DayChip
-                      active={allDays}
-                      onClick={() => setForm((f) => ({ ...f, days: [] }))}
-                    >
-                      All
-                    </DayChip>
-                    {DAY_LABELS.map((label, i) => (
-                      <DayChip
-                        key={label}
-                        active={!allDays && form.days.includes(i)}
-                        onClick={() => {
-                          if (allDays) setForm((f) => ({ ...f, days: [i] }));
-                          else toggleDay(i);
-                        }}
-                      >
-                        {label}
-                      </DayChip>
-                    ))}
-                  </div>
-                </div>
+                <ScheduleFormFields
+                  form={form}
+                  setForm={setForm}
+                  node={node}
+                  size="dialog"
+                />
 
                 <label className="flex items-center justify-between gap-3 rounded-xl border border-line bg-bg/40 px-3 py-3 text-sm">
                   <span>
@@ -366,7 +308,7 @@ export function ScheduleDialog({
       {deleteId ? (
         <ConfirmDialog
           title="Delete schedule?"
-          body="This power schedule will be permanently removed."
+          body="This schedule will be permanently removed."
           confirmLabel="Delete"
           danger
           busy={remove.isPending}
@@ -375,29 +317,5 @@ export function ScheduleDialog({
         />
       ) : null}
     </div>
-  );
-}
-
-function DayChip({
-  children,
-  active,
-  onClick,
-}: {
-  children: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`min-h-11 rounded-lg border px-3 py-1 text-xs sm:min-h-0 sm:px-2.5 ${
-        active
-          ? "border-accent bg-accent/15 text-accent"
-          : "border-line text-muted hover:bg-surface-2"
-      }`}
-    >
-      {children}
-    </button>
   );
 }

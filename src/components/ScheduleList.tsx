@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import {
+  Archive,
   CalendarClock,
   Pencil,
   Play,
@@ -15,7 +16,14 @@ const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export function actionLabel(action: PowerSchedule["action"]): string {
   if (action === "shutdown") return "Shut down";
   if (action === "stop") return "Stop";
+  if (action === "backup") return "Backup";
   return "Start";
+}
+
+export function backupModeLabel(mode: PowerSchedule["backupMode"] | undefined): string {
+  if (mode === "suspend") return "Suspend";
+  if (mode === "stop") return "Stop";
+  return "Snapshot";
 }
 
 export function lastRunLabel(schedule: PowerSchedule): string {
@@ -38,6 +46,7 @@ export function sortSchedules(schedules: PowerSchedule[]): PowerSchedule[] {
 function ActionIcon({ action }: { action: PowerSchedule["action"] }) {
   if (action === "stop") return <Square className="size-3.5" />;
   if (action === "shutdown") return <Power className="size-3.5" />;
+  if (action === "backup") return <Archive className="size-3.5" />;
   return <Play className="size-3.5" />;
 }
 
@@ -45,6 +54,7 @@ function actionTone(action: PowerSchedule["action"], enabled: boolean): string {
   if (!enabled) return "bg-white/5 text-muted";
   if (action === "start") return "bg-good/15 text-good";
   if (action === "stop") return "bg-bad/15 text-bad";
+  if (action === "backup") return "bg-accent/15 text-accent";
   return "bg-warn/15 text-warn";
 }
 
@@ -80,7 +90,7 @@ export function ScheduleEmptyState({ onAdd }: { onAdd: () => void }) {
       </div>
       <p className="text-sm font-medium">No schedules yet</p>
       <p className="mt-1 max-w-[16rem] text-xs text-muted">
-        Plan automatic start, shut down, or stop for this guest.
+        Plan automatic start, shut down, stop, or backup for this guest.
       </p>
       <button
         type="button"
@@ -107,6 +117,13 @@ export function ScheduleRow({
   onToggle: () => void;
 }) {
   const enabled = schedule.enabled;
+  const backupDetail =
+    schedule.action === "backup"
+      ? [
+          schedule.storage || "storage?",
+          backupModeLabel(schedule.backupMode),
+        ].join(" · ")
+      : null;
 
   return (
     <li
@@ -148,6 +165,9 @@ export function ScheduleRow({
                   <span className="text-[11px] text-muted">Paused</span>
                 ) : null}
               </div>
+              {backupDetail ? (
+                <p className="truncate text-[11px] text-muted">{backupDetail}</p>
+              ) : null}
               <DayDots days={schedule.days} />
               <p className="text-[11px] text-muted">
                 Last run{" "}

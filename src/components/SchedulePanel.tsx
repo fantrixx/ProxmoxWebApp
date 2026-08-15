@@ -3,21 +3,15 @@ import { useEffect, useMemo, useState } from "react";
 import { dataApi } from "../api";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ScheduleEmptyState, ScheduleRow, sortSchedules } from "./ScheduleList";
+import {
+  ScheduleFormFields,
+  buildSchedulePayload,
+  emptyScheduleForm,
+  type ScheduleFormState,
+} from "./ScheduleFormFields";
 import { useApp } from "../context";
 import { newId } from "../id";
 import type { GuestType, PowerSchedule } from "../types";
-
-const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-const emptyForm = (): Omit<PowerSchedule, "id"> & { id?: string } => ({
-  node: "",
-  type: "lxc",
-  vmid: 0,
-  enabled: true,
-  action: "start",
-  time: "08:00",
-  days: [],
-});
 
 export function SchedulePanel({
   node,
@@ -35,7 +29,7 @@ export function SchedulePanel({
   const [editing, setEditing] = useState<PowerSchedule | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [form, setForm] = useState(emptyForm());
+  const [form, setForm] = useState<ScheduleFormState>(emptyScheduleForm());
 
   const list = useQuery({
     queryKey: ["schedules"],
@@ -53,7 +47,7 @@ export function SchedulePanel({
   useEffect(() => {
     if (creating && !editing) {
       setForm({
-        ...emptyForm(),
+        ...emptyScheduleForm(),
         node,
         type,
         vmid: Number(vmid),
@@ -65,14 +59,20 @@ export function SchedulePanel({
   function openEdit(schedule: PowerSchedule) {
     setEditing(schedule);
     setCreating(false);
-    setForm({ ...schedule });
+    setForm({
+      ...emptyScheduleForm(),
+      ...schedule,
+      storage: schedule.storage || "",
+      backupMode: schedule.backupMode || "snapshot",
+      compress: schedule.compress || "zstd",
+    });
   }
 
   function openCreate() {
     setEditing(null);
     setCreating(true);
     setForm({
-      ...emptyForm(),
+      ...emptyScheduleForm(),
       node,
       type,
       vmid: Number(vmid),
@@ -83,7 +83,7 @@ export function SchedulePanel({
   function closeForm() {
     setEditing(null);
     setCreating(false);
-    setForm(emptyForm());
+    setForm(emptyScheduleForm());
   }
 
   function invalidate() {
@@ -92,19 +92,16 @@ export function SchedulePanel({
 
   const save = useMutation({
     mutationFn: () => {
-      const schedule: PowerSchedule = {
-        id: editing?.id || newId(),
-        node: form.node,
-        type: form.type as GuestType,
-        vmid: Number(form.vmid),
-        name: form.name,
-        enabled: form.enabled,
-        action: form.action,
-        time: form.time,
-        days: form.days,
-        lastRunKey: editing?.lastRunKey,
-        lastRunAt: editing?.lastRunAt,
-      };
+      const schedule = buildSchedulePayload(form, editing, {
+        node,
+        type,
+        vmid: Number(vmid),
+        name,
+      });
+      schedule.id = editing?.id || newId();
+      if (schedule.action === "backup" && !schedule.storage) {
+        return Promise.reject(new Error("Select a backup storage first."));
+      }
       return dataApi.saveSchedule(schedule);
     },
     onSuccess: () => {
@@ -135,26 +132,13 @@ export function SchedulePanel({
     onError: (err: Error) => toast("err", err.message),
   });
 
-  const allDays = form.days.length === 0;
   const busy = save.isPending || remove.isPending || toggle.isPending;
   const showForm = creating || Boolean(editing);
-
-  function toggleDay(day: number) {
-    setForm((f) => {
-      const has = f.days.includes(day);
-      const days = has ? f.days.filter((d) => d !== day) : [...f.days, day].sort();
-      return { ...f, days };
-    });
-  }
-
-  function setAllDays() {
-    setForm((f) => ({ ...f, days: [] }));
-  }
 
   return (
     <section className="rounded-2xl border border-line bg-surface p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-sm font-medium text-muted">Power schedules</h2>
+        <h2 className="text-sm font-medium text-muted">Schedules</h2>
         {!showForm && guestSchedules.length > 0 ? (
           <button
             type="button"
@@ -168,7 +152,8 @@ export function SchedulePanel({
 
       <p className="mb-4 text-xs text-muted">
         Requires ProxPanel to keep running. Prefer an API token in <code>.env</code> for
-        schedules after reboot.
+        schedules after reboot. Backup schedules need VM.Backup and storage space
+        permissions.
       </p>
 
       {list.isError ? (
@@ -200,59 +185,12 @@ export function SchedulePanel({
             save.mutate();
           }}
         >
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label>
-              <span className="mb-1 block text-[11px] text-muted">Action</span>
-              <select
-                value={form.action}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    action: e.target.value as PowerSchedule["action"],
-                  }))
-                }
-                className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-base outline-none focus:border-accent md:text-sm"
-              >
-                <option value="start">Start</option>
-                <option value="shutdown">Shut down</option>
-                <option value="stop">Stop</option>
-              </select>
-            </label>
-            <label>
-              <span className="mb-1 block text-[11px] text-muted">Time</span>
-              <input
-                type="time"
-                value={form.time}
-                onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))}
-                className="w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-base outline-none focus:border-accent md:text-sm"
-                required
-              />
-            </label>
-          </div>
-
-          <div>
-            <span className="mb-2 block text-[11px] text-muted">Days</span>
-            <div className="flex flex-wrap gap-2">
-              <DayChip active={allDays} onClick={setAllDays}>
-                All
-              </DayChip>
-              {DAY_LABELS.map((label, i) => (
-                <DayChip
-                  key={label}
-                  active={!allDays && form.days.includes(i)}
-                  onClick={() => {
-                    if (allDays) {
-                      setForm((f) => ({ ...f, days: [i] }));
-                    } else {
-                      toggleDay(i);
-                    }
-                  }}
-                >
-                  {label}
-                </DayChip>
-              ))}
-            </div>
-          </div>
+          <ScheduleFormFields
+            form={form}
+            setForm={setForm}
+            node={node}
+            size="panel"
+          />
 
           <label className="flex items-center gap-2 text-sm text-muted">
             <input
@@ -287,7 +225,7 @@ export function SchedulePanel({
       {deleteId ? (
         <ConfirmDialog
           title="Delete schedule?"
-          body="This power schedule will be permanently removed."
+          body="This schedule will be permanently removed."
           confirmLabel="Delete"
           danger
           busy={remove.isPending}
@@ -296,29 +234,5 @@ export function SchedulePanel({
         />
       ) : null}
     </section>
-  );
-}
-
-function DayChip({
-  children,
-  active,
-  onClick,
-}: {
-  children: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`min-h-11 rounded-lg border px-3 py-1 text-xs sm:min-h-0 sm:px-2.5 ${
-        active
-          ? "border-accent bg-accent/15 text-accent"
-          : "border-line text-muted hover:bg-surface-2"
-      }`}
-    >
-      {children}
-    </button>
   );
 }

@@ -1,8 +1,12 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { pveRequest } from "./proxmox.ts";
+import { pveRequest, unwrapUpid } from "./proxmox.ts";
 import type { Session } from "./session.ts";
+
+export type ScheduleAction = "start" | "shutdown" | "stop" | "backup";
+export type BackupMode = "snapshot" | "suspend" | "stop";
+export type BackupCompress = "zstd" | "gzip" | "lzo" | "0";
 
 export type PowerSchedule = {
   id: string;
@@ -11,16 +15,26 @@ export type PowerSchedule = {
   vmid: number;
   name?: string;
   enabled: boolean;
-  /** "start" | "shutdown" | "stop" */
-  action: "start" | "shutdown" | "stop";
+  /** "start" | "shutdown" | "stop" | "backup" */
+  action: ScheduleAction;
   /** HH:MM 24h local time of the ProxPanel server */
   time: string;
   /** 0=Sun .. 6=Sat, empty = every day */
   days: number[];
+  /** Required when action is backup — vzdump target storage */
+  storage?: string;
+  /** vzdump mode; defaults to snapshot (live backup) */
+  backupMode?: BackupMode;
+  /** vzdump compression; defaults to zstd */
+  compress?: BackupCompress;
   lastRunKey?: string;
   /** Unix epoch seconds when the schedule last executed successfully */
   lastRunAt?: number;
 };
+
+const POWER_ACTIONS = new Set<ScheduleAction>(["start", "shutdown", "stop"]);
+const BACKUP_MODES = new Set<BackupMode>(["snapshot", "suspend", "stop"]);
+const BACKUP_COMPRESS = new Set<BackupCompress>(["zstd", "gzip", "lzo", "0"]);
 
 const DATA_FILE = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -79,6 +93,35 @@ export async function deleteSchedule(id: string): Promise<boolean> {
   return true;
 }
 
+export function isScheduleAction(value: unknown): value is ScheduleAction {
+  return value === "start" || value === "shutdown" || value === "stop" || value === "backup";
+}
+
+export function normalizeBackupFields(input: {
+  action: ScheduleAction;
+  storage?: string;
+  backupMode?: string;
+  compress?: string;
+}): { storage?: string; backupMode?: BackupMode; compress?: BackupCompress } | { error: string } {
+  if (input.action !== "backup") {
+    return {};
+  }
+  const storage = String(input.storage || "").trim();
+  if (!storage) {
+    return { error: "Storage is required for backup schedules." };
+  }
+  const backupMode = (input.backupMode || "snapshot") as BackupMode;
+  if (!BACKUP_MODES.has(backupMode)) {
+    return { error: "Invalid backup mode." };
+  }
+  let compress = (input.compress || "zstd") as BackupCompress | "none";
+  if (compress === "none") compress = "0";
+  if (!BACKUP_COMPRESS.has(compress as BackupCompress)) {
+    return { error: "Invalid compression." };
+  }
+  return { storage, backupMode, compress: compress as BackupCompress };
+}
+
 function todayRunKey(time: string): string {
   const now = new Date();
   const y = now.getFullYear();
@@ -97,6 +140,63 @@ function matchesSchedule(schedule: PowerSchedule, now: Date): boolean {
   return schedule.lastRunKey !== key;
 }
 
+async function runPowerAction(session: Session, schedule: PowerSchedule): Promise<void> {
+  await pveRequest(
+    session,
+    "POST",
+    `/nodes/${encodeURIComponent(schedule.node)}/${schedule.type}/${encodeURIComponent(String(schedule.vmid))}/status/${schedule.action}`,
+  );
+}
+
+async function runBackupAction(session: Session, schedule: PowerSchedule): Promise<void> {
+  const storage = String(schedule.storage || "").trim();
+  if (!storage) {
+    throw new Error("Backup schedule is missing storage.");
+  }
+  const vmid = String(schedule.vmid);
+  const node = schedule.node;
+
+  await pveRequest(
+    session,
+    "GET",
+    `/nodes/${encodeURIComponent(node)}/${schedule.type}/${encodeURIComponent(vmid)}/status/current`,
+  );
+
+  const payload = {
+    vmid,
+    storage,
+    mode: schedule.backupMode || "snapshot",
+    compress: schedule.compress || "zstd",
+    remove: "0",
+  };
+
+  console.info("[schedules] starting vzdump", {
+    node,
+    type: schedule.type,
+    ...payload,
+  });
+
+  const raw = await pveRequest(
+    session,
+    "POST",
+    `/nodes/${encodeURIComponent(node)}/vzdump`,
+    payload,
+  );
+
+  if (raw === "OK" || raw === "ok") {
+    throw new Error(
+      `Proxmox did not start a backup for guest ${vmid} on node "${node}" (got OK with no task).`,
+    );
+  }
+
+  const upid = unwrapUpid(raw);
+  if (!upid) {
+    throw new Error("Proxmox did not return a backup task id.");
+  }
+
+  console.info("[schedules] vzdump started", { node, vmid, upid });
+}
+
 export function startScheduleRunner(getSession: () => Session | null): void {
   const tick = async () => {
     const session = getSession();
@@ -110,11 +210,14 @@ export function startScheduleRunner(getSession: () => Session | null): void {
       if (!matchesSchedule(schedule, now)) continue;
       const key = todayRunKey(schedule.time);
       try {
-        await pveRequest(
-          session,
-          "POST",
-          `/nodes/${encodeURIComponent(schedule.node)}/${schedule.type}/${encodeURIComponent(String(schedule.vmid))}/status/${schedule.action}`,
-        );
+        if (schedule.action === "backup") {
+          await runBackupAction(session, schedule);
+        } else if (POWER_ACTIONS.has(schedule.action)) {
+          await runPowerAction(session, schedule);
+        } else {
+          console.error(`[schedules] Unknown action ${schedule.action} for ${schedule.id}`);
+          continue;
+        }
         schedule.lastRunKey = key;
         schedule.lastRunAt = Math.floor(Date.now() / 1000);
         changed = true;
