@@ -112,47 +112,56 @@ export default function Login() {
         <UpdateBanner className="mb-4" />
 
         <form
+          method="post"
+          action="/login"
           onSubmit={(e) => void submit(e, false)}
           className="rounded-2xl border border-line bg-surface/90 p-6 shadow-2xl backdrop-blur"
         >
-          <label className="mb-4 block">
-            <span className="mb-1.5 block text-xs text-muted">Proxmox server</span>
+          <div className="mb-4">
+            <label htmlFor="login-host" className="mb-1.5 block text-xs text-muted">
+              Proxmox server
+            </label>
             <input
+              id="login-host"
+              name="host"
+              type="text"
+              inputMode="url"
               value={host}
               onChange={(e) => setHost(e.target.value)}
               placeholder="https://192.168.1.10:8006"
               className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent md:text-sm"
               autoComplete="url"
+              data-1p-ignore
+              data-lpignore="true"
               required={!hasToken}
             />
-          </label>
-          <div className="mb-4 grid grid-cols-2 gap-3">
-            <label>
-              <span className="mb-1.5 block text-xs text-muted">Username</span>
-              <input
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="root"
-                className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent md:text-sm"
-                autoComplete="username"
-                required={!hasToken}
-              />
-            </label>
-            <label>
-              <span className="mb-1.5 block text-xs text-muted">Realm</span>
-              <select
-                value={realm}
-                onChange={(e) => setRealm(e.target.value)}
-                className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent md:text-sm"
-              >
-                <option value="pam">pam (Linux)</option>
-                <option value="pve">pve</option>
-              </select>
-            </label>
           </div>
-          <label className="mb-4 block">
-            <span className="mb-1.5 block text-xs text-muted">Password</span>
+          <div className="mb-4">
+            <label htmlFor="login-username" className="mb-1.5 block text-xs text-muted">
+              Username
+            </label>
             <input
+              id="login-username"
+              name="username"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="root"
+              className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent md:text-sm"
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              required={!hasToken}
+            />
+          </div>
+          <div className="mb-4">
+            <label htmlFor="login-password" className="mb-1.5 block text-xs text-muted">
+              Password
+            </label>
+            <input
+              id="login-password"
+              name="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -160,13 +169,33 @@ export default function Login() {
               autoComplete="current-password"
               required={!hasToken}
             />
-          </label>
+          </div>
+          <div className="mb-4">
+            <label htmlFor="login-realm" className="mb-1.5 block text-xs text-muted">
+              Realm
+            </label>
+            <select
+              id="login-realm"
+              name="realm"
+              value={realm}
+              onChange={(e) => setRealm(e.target.value)}
+              className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent md:text-sm"
+              data-1p-ignore
+              data-lpignore="true"
+            >
+              <option value="pam">pam (Linux)</option>
+              <option value="pve">pve</option>
+            </select>
+          </div>
           <label className="mb-5 flex items-center gap-2 text-sm text-muted">
             <input
               type="checkbox"
+              name="checkCert"
               checked={checkCert}
               onChange={(e) => setCheckCert(e.target.checked)}
               className="accent-accent"
+              data-1p-ignore
+              data-lpignore="true"
             />
             Verify TLS certificate
           </label>
