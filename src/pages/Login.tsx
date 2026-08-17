@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Cpu } from "lucide-react";
@@ -35,13 +35,17 @@ function saveLoginPrefs(prefs: LoginPrefs) {
   localStorage.setItem(LOGIN_PREFS_KEY, JSON.stringify(prefs));
 }
 
+const fieldClass =
+  "w-full rounded-xl border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent md:text-sm";
+
 export default function Login() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const saved = loadLoginPrefs();
+  const usernameRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+
   const [host, setHost] = useState(saved?.host ?? "");
-  const [username, setUsername] = useState(saved?.username ?? "");
-  const [password, setPassword] = useState("");
   const [realm, setRealm] = useState(saved?.realm ?? "pam");
   const [checkCert, setCheckCert] = useState(saved?.checkCert ?? false);
   const [hasToken, setHasToken] = useState(false);
@@ -53,11 +57,11 @@ export default function Login() {
       .defaults()
       .then((d) => {
         setHasToken(d.hasToken);
-        if (!loadLoginPrefs()) {
-          if (d.host) setHost(d.host);
-          if (d.username) setUsername(d.username);
-          if (d.realm) setRealm(d.realm);
-        }
+        if (loadLoginPrefs()) return;
+        if (d.host) setHost((h) => h || d.host);
+        if (d.realm) setRealm((r) => r || d.realm);
+        const userEl = usernameRef.current;
+        if (d.username && userEl && !userEl.value) userEl.value = d.username;
       })
       .catch(() => undefined);
 
@@ -67,9 +71,27 @@ export default function Login() {
       .catch(() => undefined);
   }, [navigate]);
 
-  async function submit(ev: FormEvent, useEnvToken = false) {
+  function readCredentials() {
+    return {
+      username: usernameRef.current?.value.trim() ?? "",
+      password: passwordRef.current?.value ?? "",
+    };
+  }
+
+  async function submit(ev: { preventDefault(): void }, useEnvToken = false) {
     ev.preventDefault();
-    if (!useEnvToken && (!host.trim() || !username.trim() || !password)) {
+    const form =
+      ev.currentTarget instanceof HTMLFormElement
+        ? ev.currentTarget
+        : usernameRef.current?.form ?? null;
+    const fd = form ? new FormData(form) : null;
+    const username = (
+      fd ? String(fd.get("username") ?? "") : readCredentials().username
+    ).trim();
+    const password = fd
+      ? String(fd.get("password") ?? "")
+      : readCredentials().password;
+    if (!useEnvToken && (!host.trim() || !username || !password)) {
       setError("Server, username, and password are required.");
       return;
     }
@@ -115,101 +137,84 @@ export default function Login() {
 
         <UpdateBanner className="mb-4" />
 
-        <div className="rounded-2xl border border-line bg-surface/90 p-6 shadow-2xl backdrop-blur">
-          {/*
-            Username + password live in their own form. Extra fields (server URL,
-            realm) in the same <form> stop iOS Safari / 1Password from treating
-            this as a login and offering AutoFill.
-          */}
-          <form
-            method="post"
-            action="/login"
-            autoComplete="on"
-            onSubmit={(e) => void submit(e, false)}
-          >
-            <div className="mb-4">
-              <label htmlFor="username" className="mb-1.5 block text-xs text-muted">
-                Username
-              </label>
-              <input
-                id="username"
-                name="username"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="root"
-                className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent md:text-sm"
-                autoComplete="username"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                required={!hasToken}
-              />
-            </div>
-            <div className="mb-5">
-              <label htmlFor="password" className="mb-1.5 block text-xs text-muted">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent md:text-sm"
-                autoComplete="current-password"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                required={!hasToken}
-              />
-            </div>
+        <form
+          method="post"
+          action="/login"
+          autoComplete="on"
+          onSubmit={(e) => void submit(e, false)}
+          className="rounded-2xl border border-line bg-surface/90 p-6 shadow-2xl backdrop-blur"
+        >
+          <div className="mb-4">
+            <label htmlFor="username" className="mb-1.5 block text-xs text-muted">
+              Username
+            </label>
+            <input
+              ref={usernameRef}
+              id="username"
+              name="username"
+              type="text"
+              defaultValue={saved?.username ?? ""}
+              placeholder="root"
+              className={fieldClass}
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              required
+            />
+          </div>
 
-            {error ? (
-              <p className="mb-4 rounded-xl border border-bad/30 bg-bad/10 px-3 py-2 text-sm text-bad">
-                {error}
-              </p>
-            ) : null}
+          <div className="mb-5">
+            <label htmlFor="password" className="mb-1.5 block text-xs text-muted">
+              Password
+            </label>
+            <input
+              ref={passwordRef}
+              id="password"
+              name="password"
+              type="password"
+              className={`${fieldClass} pr-12`}
+              autoComplete="current-password"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              required
+            />
+          </div>
 
-            <button
-              type="submit"
-              disabled={pending}
-              className="min-h-12 w-full rounded-xl bg-accent py-3 text-sm font-semibold text-black hover:bg-accent-2 disabled:opacity-50"
-            >
-              {pending ? "Connecting…" : "Sign in"}
-            </button>
-          </form>
-
-          <form autoComplete="off" className="mt-6 border-t border-line pt-5" onSubmit={(e) => e.preventDefault()}>
-            <div className="mb-4">
-              <label htmlFor="server" className="mb-1.5 block text-xs text-muted">
+          <details className="mb-5 border-t border-line pt-4" defaultOpen={!saved?.host}>
+            <summary className="cursor-pointer text-xs text-muted">
+              Connection{host ? ` · ${host}` : ""}
+            </summary>
+            <div className="mt-3">
+              <label htmlFor="proxpanel-server" className="mb-1.5 block text-xs text-muted">
                 Proxmox server
               </label>
               <input
-                id="server"
-                name="server"
+                id="proxpanel-server"
+                name="proxpanel-server"
                 type="text"
                 inputMode="url"
                 value={host}
                 onChange={(e) => setHost(e.target.value)}
                 placeholder="https://192.168.1.10:8006"
-                className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent md:text-sm"
+                className={fieldClass}
                 autoComplete="off"
                 data-1p-ignore
                 data-lpignore="true"
                 data-form-type="other"
               />
             </div>
-            <div className="mb-4">
-              <label htmlFor="realm" className="mb-1.5 block text-xs text-muted">
+            <div className="mt-4">
+              <label htmlFor="proxpanel-realm" className="mb-1.5 block text-xs text-muted">
                 Realm
               </label>
               <select
-                id="realm"
-                name="realm"
+                id="proxpanel-realm"
+                name="proxpanel-realm"
                 value={realm}
                 onChange={(e) => setRealm(e.target.value)}
-                className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent md:text-sm"
+                className={fieldClass}
                 autoComplete="off"
                 data-1p-ignore
                 data-lpignore="true"
@@ -218,10 +223,10 @@ export default function Login() {
                 <option value="pve">pve</option>
               </select>
             </div>
-            <label className="flex items-center gap-2 text-sm text-muted">
+            <label className="mt-4 flex items-center gap-2 text-sm text-muted">
               <input
                 type="checkbox"
-                name="checkCert"
+                name="proxpanel-check-cert"
                 checked={checkCert}
                 onChange={(e) => setCheckCert(e.target.checked)}
                 className="accent-accent"
@@ -231,19 +236,34 @@ export default function Login() {
               />
               Verify TLS certificate
             </label>
-          </form>
+          </details>
+
+          {error ? (
+            <p className="mb-4 rounded-xl border border-bad/30 bg-bad/10 px-3 py-2 text-sm text-bad">
+              {error}
+            </p>
+          ) : null}
+
+          <button
+            type="submit"
+            disabled={pending}
+            className="min-h-12 w-full rounded-xl bg-accent py-3 text-sm font-semibold text-black hover:bg-accent-2 disabled:opacity-50"
+          >
+            {pending ? "Connecting…" : "Sign in"}
+          </button>
 
           {hasToken ? (
             <button
               type="button"
               disabled={pending}
               onClick={(e) => void submit(e, true)}
-              className="mt-4 w-full rounded-xl border border-line py-2.5 text-sm text-muted hover:bg-surface-2 hover:text-ink disabled:opacity-50"
+              className="mt-3 w-full rounded-xl border border-line py-2.5 text-sm text-muted hover:bg-surface-2 hover:text-ink disabled:opacity-50"
             >
               Connect with API token from .env
             </button>
           ) : null}
-        </div>
+        </form>
+
         <p className="mt-6 text-center text-xs text-muted">
           Server, username, and realm are saved in this browser. The password is not.
         </p>

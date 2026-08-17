@@ -119,6 +119,16 @@ body {
   background: transparent;
 }
 
+/* Keep autofilled login fields readable on the dark theme (Safari/Chrome/1Password). */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--color-ink);
+  caret-color: var(--color-ink);
+  box-shadow: 0 0 0 1000px var(--color-bg) inset;
+  transition: background-color 9999s ease-out;
+}
+
 @keyframes job-indeterminate {
   0% {
     left: -40%;
