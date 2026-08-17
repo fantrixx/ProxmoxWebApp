@@ -158,7 +158,11 @@ export function GuestCard({
 
   return (
     <article
-      onContextMenu={(e) => e.preventDefault()}
+      onContextMenu={(e) => {
+        const target = e.target as HTMLElement | null;
+        if (target?.closest("button, a, input, textarea")) return;
+        e.preventDefault();
+      }}
       onPointerDown={onCardPointerDown}
       onPointerUp={onCardPointerUp}
       onPointerLeave={onCardPointerUp}
