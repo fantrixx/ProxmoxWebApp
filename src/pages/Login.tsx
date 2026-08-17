@@ -69,6 +69,10 @@ export default function Login() {
 
   async function submit(ev: FormEvent, useEnvToken = false) {
     ev.preventDefault();
+    if (!useEnvToken && (!host.trim() || !username.trim() || !password)) {
+      setError("Server, username, and password are required.");
+      return;
+    }
     setPending(true);
     setError(null);
     try {
@@ -111,120 +115,135 @@ export default function Login() {
 
         <UpdateBanner className="mb-4" />
 
-        <form
-          method="post"
-          action="/login"
-          onSubmit={(e) => void submit(e, false)}
-          className="rounded-2xl border border-line bg-surface/90 p-6 shadow-2xl backdrop-blur"
-        >
-          <div className="mb-4">
-            <label htmlFor="login-host" className="mb-1.5 block text-xs text-muted">
-              Proxmox server
-            </label>
-            <input
-              id="login-host"
-              name="host"
-              type="text"
-              inputMode="url"
-              value={host}
-              onChange={(e) => setHost(e.target.value)}
-              placeholder="https://192.168.1.10:8006"
-              className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent md:text-sm"
-              autoComplete="url"
-              data-1p-ignore
-              data-lpignore="true"
-              required={!hasToken}
-            />
-          </div>
-          <div className="mb-4">
-            <label htmlFor="login-username" className="mb-1.5 block text-xs text-muted">
-              Username
-            </label>
-            <input
-              id="login-username"
-              name="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="root"
-              className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent md:text-sm"
-              autoComplete="username"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              required={!hasToken}
-            />
-          </div>
-          <div className="mb-4">
-            <label htmlFor="login-password" className="mb-1.5 block text-xs text-muted">
-              Password
-            </label>
-            <input
-              id="login-password"
-              name="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent md:text-sm"
-              autoComplete="current-password"
-              required={!hasToken}
-            />
-          </div>
-          <div className="mb-4">
-            <label htmlFor="login-realm" className="mb-1.5 block text-xs text-muted">
-              Realm
-            </label>
-            <select
-              id="login-realm"
-              name="realm"
-              value={realm}
-              onChange={(e) => setRealm(e.target.value)}
-              className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent md:text-sm"
-              data-1p-ignore
-              data-lpignore="true"
-            >
-              <option value="pam">pam (Linux)</option>
-              <option value="pve">pve</option>
-            </select>
-          </div>
-          <label className="mb-5 flex items-center gap-2 text-sm text-muted">
-            <input
-              type="checkbox"
-              name="checkCert"
-              checked={checkCert}
-              onChange={(e) => setCheckCert(e.target.checked)}
-              className="accent-accent"
-              data-1p-ignore
-              data-lpignore="true"
-            />
-            Verify TLS certificate
-          </label>
-
-          {error ? (
-            <p className="mb-4 rounded-xl border border-bad/30 bg-bad/10 px-3 py-2 text-sm text-bad">
-              {error}
-            </p>
-          ) : null}
-
-          <button
-            type="submit"
-            disabled={pending}
-            className="min-h-12 w-full rounded-xl bg-accent py-3 text-sm font-semibold text-black hover:bg-accent-2 disabled:opacity-50"
+        <div className="rounded-2xl border border-line bg-surface/90 p-6 shadow-2xl backdrop-blur">
+          {/*
+            Username + password live in their own form. Extra fields (server URL,
+            realm) in the same <form> stop iOS Safari / 1Password from treating
+            this as a login and offering AutoFill.
+          */}
+          <form
+            method="post"
+            action="/login"
+            autoComplete="on"
+            onSubmit={(e) => void submit(e, false)}
           >
-            {pending ? "Connecting…" : "Sign in"}
-          </button>
+            <div className="mb-4">
+              <label htmlFor="username" className="mb-1.5 block text-xs text-muted">
+                Username
+              </label>
+              <input
+                id="username"
+                name="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="root"
+                className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent md:text-sm"
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                required={!hasToken}
+              />
+            </div>
+            <div className="mb-5">
+              <label htmlFor="password" className="mb-1.5 block text-xs text-muted">
+                Password
+              </label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent md:text-sm"
+                autoComplete="current-password"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                required={!hasToken}
+              />
+            </div>
+
+            {error ? (
+              <p className="mb-4 rounded-xl border border-bad/30 bg-bad/10 px-3 py-2 text-sm text-bad">
+                {error}
+              </p>
+            ) : null}
+
+            <button
+              type="submit"
+              disabled={pending}
+              className="min-h-12 w-full rounded-xl bg-accent py-3 text-sm font-semibold text-black hover:bg-accent-2 disabled:opacity-50"
+            >
+              {pending ? "Connecting…" : "Sign in"}
+            </button>
+          </form>
+
+          <form autoComplete="off" className="mt-6 border-t border-line pt-5" onSubmit={(e) => e.preventDefault()}>
+            <div className="mb-4">
+              <label htmlFor="server" className="mb-1.5 block text-xs text-muted">
+                Proxmox server
+              </label>
+              <input
+                id="server"
+                name="server"
+                type="text"
+                inputMode="url"
+                value={host}
+                onChange={(e) => setHost(e.target.value)}
+                placeholder="https://192.168.1.10:8006"
+                className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent md:text-sm"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                data-form-type="other"
+              />
+            </div>
+            <div className="mb-4">
+              <label htmlFor="realm" className="mb-1.5 block text-xs text-muted">
+                Realm
+              </label>
+              <select
+                id="realm"
+                name="realm"
+                value={realm}
+                onChange={(e) => setRealm(e.target.value)}
+                className="w-full rounded-xl border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent md:text-sm"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+              >
+                <option value="pam">pam (Linux)</option>
+                <option value="pve">pve</option>
+              </select>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-muted">
+              <input
+                type="checkbox"
+                name="checkCert"
+                checked={checkCert}
+                onChange={(e) => setCheckCert(e.target.checked)}
+                className="accent-accent"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+              />
+              Verify TLS certificate
+            </label>
+          </form>
 
           {hasToken ? (
             <button
               type="button"
               disabled={pending}
               onClick={(e) => void submit(e, true)}
-              className="mt-3 w-full rounded-xl border border-line py-2.5 text-sm text-muted hover:bg-surface-2 hover:text-ink disabled:opacity-50"
+              className="mt-4 w-full rounded-xl border border-line py-2.5 text-sm text-muted hover:bg-surface-2 hover:text-ink disabled:opacity-50"
             >
               Connect with API token from .env
             </button>
           ) : null}
-        </form>
+        </div>
         <p className="mt-6 text-center text-xs text-muted">
           Server, username, and realm are saved in this browser. The password is not.
         </p>
