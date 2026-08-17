@@ -193,7 +193,7 @@ app.post("/api/auth/login", async (req, res) => {
       });
       clearLoginFailures(ip);
       res.cookie(COOKIE_NAME, session.id, cookieOptions());
-      res.json({ username: tokenId, host: normalized });
+      res.json({ username: tokenId, host: normalized, authKind: "token" as const });
       return;
     }
 
@@ -221,7 +221,7 @@ app.post("/api/auth/login", async (req, res) => {
 
     clearLoginFailures(ip);
     res.cookie(COOKIE_NAME, session.id, cookieOptions());
-    res.json({ username: login.username, host: normalized });
+    res.json({ username: login.username, host: normalized, authKind: "ticket" as const });
   } catch (err) {
     recordLoginFailure(ip);
     sendError(res, err);
@@ -245,7 +245,11 @@ app.post("/api/auth/logout", async (req, res) => {
 
 app.get("/api/auth/me", requireSession, (req, res) => {
   const session = sessionOf(req);
-  res.json({ username: session.username, host: session.host });
+  res.json({
+    username: session.username,
+    host: session.host,
+    authKind: session.auth.kind,
+  });
 });
 
 type ResourceRow = {

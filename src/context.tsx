@@ -11,6 +11,12 @@ export type ConsoleTarget = {
   name: string;
 };
 
+export type NodeConsoleTarget = {
+  node: string;
+  title: string;
+  command?: string;
+};
+
 export type Toast = {
   id: string;
   kind: "ok" | "err" | "info";
@@ -57,6 +63,7 @@ function saveJobs(jobs: ActiveJob[]) {
 type AppContextValue = {
   user: AuthUser;
   openConsole: (t: ConsoleTarget) => void;
+  openNodeConsole: (t: NodeConsoleTarget) => void;
   toasts: Toast[];
   toast: (kind: Toast["kind"], text: string) => void;
   dismissToast: (id: string) => void;
@@ -130,6 +137,45 @@ export function openDetachedConsole(t: ConsoleTarget) {
 
 export function shellStorageKey(type: string, node: string, vmid: string | number): string {
   return `proxpanel.shell.buffer.${type}.${node}.${vmid}`;
+}
+
+export function nodeShellAutorunKey(node: string): string {
+  return `proxpanel.shell.autorun.node.${node}`;
+}
+
+function nodeConsoleUrl(t: NodeConsoleTarget): string {
+  const qs = new URLSearchParams({ name: t.title || t.node });
+  if (t.command) qs.set("run", "1");
+  return `/console/node/${encodeURIComponent(t.node)}?${qs}`;
+}
+
+export function openDetachedNodeConsole(t: NodeConsoleTarget) {
+  if (t.command) {
+    try {
+      sessionStorage.setItem(nodeShellAutorunKey(t.node), t.command);
+    } catch {
+      /* quota / private mode */
+    }
+  }
+  const url = nodeConsoleUrl(t);
+  const winName = `proxpanel-shell-node-${t.node}`;
+  const features =
+    "popup=yes,width=1100,height=720,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=no";
+
+  let win: Window | null = null;
+  try {
+    win = window.open("", winName, features);
+  } catch {
+    win = null;
+  }
+
+  if (!win) {
+    window.open(url, "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  win.location.href = url;
+  win.focus();
 }
 
 export function AppProvider({
@@ -239,6 +285,7 @@ export function AppProvider({
     () => ({
       user,
       openConsole: openDetachedConsole,
+      openNodeConsole: openDetachedNodeConsole,
       toasts,
       toast,
       dismissToast,

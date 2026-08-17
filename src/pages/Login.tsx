@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Cpu } from "lucide-react";
@@ -51,6 +51,7 @@ export default function Login() {
   const [hasToken, setHasToken] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [connectionOpen, setConnectionOpen] = useState(() => !saved?.host);
 
   useEffect(() => {
     void authApi
@@ -78,10 +79,10 @@ export default function Login() {
     };
   }
 
-  async function submit(ev: { preventDefault(): void }, useEnvToken = false) {
+  async function submit(ev: FormEvent | MouseEvent, useEnvToken = false) {
     ev.preventDefault();
     const form =
-      ev.currentTarget instanceof HTMLFormElement
+      "currentTarget" in ev && ev.currentTarget instanceof HTMLFormElement
         ? ev.currentTarget
         : usernameRef.current?.form ?? null;
     const fd = form ? new FormData(form) : null;
@@ -182,7 +183,11 @@ export default function Login() {
             />
           </div>
 
-          <details className="mb-5 border-t border-line pt-4" defaultOpen={!saved?.host}>
+          <details
+            className="mb-5 border-t border-line pt-4"
+            open={connectionOpen}
+            onToggle={(e) => setConnectionOpen(e.currentTarget.open)}
+          >
             <summary className="cursor-pointer text-xs text-muted">
               Connection{host ? ` · ${host}` : ""}
             </summary>

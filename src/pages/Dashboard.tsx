@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Search } from "lucide-react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Plus, Search, Store } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Header } from "../components/Header";
 import { GuestCard } from "../components/GuestCard";
 import { CreateGuestDialog } from "../components/CreateGuestDialog";
@@ -141,6 +141,14 @@ export default function Dashboard() {
                     className="w-full rounded-lg border border-line bg-surface py-1.5 pr-2 pl-8 text-sm outline-none focus:border-accent md:py-2 md:pl-9"
                   />
                 </div>
+                <Link
+                  to="/marketplace"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-line px-2 py-1.5 text-xs font-medium hover:bg-surface-2 md:px-2.5"
+                  title="Marketplace"
+                >
+                  <Store className="size-3.5" />
+                  <span className="hidden sm:inline">Apps</span>
+                </Link>
                 <button
                   type="button"
                   onClick={() => setCreateType("lxc")}

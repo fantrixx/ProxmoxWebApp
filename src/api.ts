@@ -12,6 +12,7 @@ import type {
   PveTask,
   ResourcesResponse,
   Snapshot,
+  MarketplaceCatalog,
 } from "./types";
 
 export class ApiError extends Error {
@@ -345,4 +346,8 @@ export const dataApi = {
     api<{ ok: boolean }>(`/api/schedules/${encodeURIComponent(id)}`, {
       method: "DELETE",
     }),
+  marketplace: (refresh = false) =>
+    api<MarketplaceCatalog>(
+      `/api/marketplace${refresh ? "?refresh=1" : ""}`,
+    ),
 };

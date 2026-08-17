@@ -6,7 +6,7 @@ import { SerializeAddon } from "@xterm/addon-serialize";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { X } from "lucide-react";
 import "@xterm/xterm/css/xterm.css";
-import { shellStorageKey } from "../context";
+import { nodeShellAutorunKey, shellStorageKey } from "../context";
 
 const textEncoder = new TextEncoder();
 
@@ -38,6 +38,17 @@ function writeSavedBuffer(key: string, value: string) {
   }
 }
 
+function takeAutorunCommand(node: string): string | null {
+  try {
+    const key = nodeShellAutorunKey(node);
+    const cmd = sessionStorage.getItem(key);
+    if (cmd) sessionStorage.removeItem(key);
+    return cmd && cmd.trim() ? cmd : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function ConsolePage() {
   const { type, node, vmid } = useParams();
   const [search] = useSearchParams();
@@ -45,9 +56,11 @@ export default function ConsolePage() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
 
-  const name = search.get("name") || vmid || "guest";
+  const isNodeShell = type === "node" || !vmid;
+  const name = search.get("name") || (isNodeShell ? node : vmid) || "shell";
   const guestType = type === "qemu" ? "qemu" : "lxc";
-  const kind = guestType === "lxc" ? "CT" : "VM";
+  const kind = isNodeShell ? "Node" : guestType === "lxc" ? "CT" : "VM";
+  const wantAutorun = isNodeShell && search.get("run") === "1";
 
   function closeWindow() {
     if (window.opener && !window.opener.closed) {
@@ -58,17 +71,27 @@ export default function ConsolePage() {
   }
 
   useEffect(() => {
-    if (!node || !vmid || !wrapRef.current) return;
+    if (!node || !wrapRef.current) return;
+    if (!isNodeShell && !vmid) return;
 
-    document.title = `Shell · ${kind} ${vmid} · ${name} — ProxPanel`;
-    const storageKey = shellStorageKey(guestType, node, vmid);
+    document.title = isNodeShell
+      ? `Shell · Node ${node} · ${name} — ProxPanel`
+      : `Shell · ${kind} ${vmid} · ${name} — ProxPanel`;
+    const storageKey = isNodeShell
+      ? shellStorageKey("node", node, "host")
+      : shellStorageKey(guestType, node, vmid!);
+
+    const autorun = wantAutorun ? takeAutorunCommand(node) : null;
 
     let disposed = false;
     let ws: WebSocket | null = null;
     let keepalive: ReturnType<typeof setInterval> | undefined;
     let saveTimer: ReturnType<typeof setInterval> | undefined;
+    let idleTimer: ReturnType<typeof setTimeout> | undefined;
+    let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
     let connected = false;
     let sawOutput = false;
+    let sentAutorun = false;
 
     const isMobile = window.matchMedia("(max-width: 640px)").matches;
     const term = new Terminal({
@@ -92,7 +115,7 @@ export default function ConsolePage() {
     term.open(wrapRef.current);
     termRef.current = term;
 
-    const saved = readSavedBuffer(storageKey);
+    const saved = autorun ? null : readSavedBuffer(storageKey);
     let restored = false;
     if (saved) {
       term.write(saved);
@@ -101,6 +124,9 @@ export default function ConsolePage() {
       restored = true;
     } else {
       term.writeln("\x1b[90mStarting shell…\x1b[0m");
+      if (autorun) {
+        term.writeln("\x1b[90mInstall command will be sent after the prompt appears.\x1b[0m");
+      }
     }
 
     const persist = () => {
@@ -118,6 +144,23 @@ export default function ConsolePage() {
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(encodeResize(cols, rows));
       }
+    };
+
+    const sendAutorun = () => {
+      if (sentAutorun || disposed || !autorun || !ws || ws.readyState !== WebSocket.OPEN) {
+        return;
+      }
+      sentAutorun = true;
+      if (idleTimer) clearTimeout(idleTimer);
+      if (fallbackTimer) clearTimeout(fallbackTimer);
+      term.writeln("\x1b[90m── sending Helper Script command ──\x1b[0m");
+      ws.send(encodeInput(`${autorun}\r`));
+    };
+
+    const scheduleAutorun = () => {
+      if (sentAutorun || !autorun) return;
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(sendAutorun, 900);
     };
 
     const onResizeDisposable = term.onResize(() => {
@@ -140,11 +183,11 @@ export default function ConsolePage() {
       fit.fit();
 
       const proto = location.protocol === "https:" ? "wss" : "ws";
-      const qs = new URLSearchParams({
-        type: guestType,
-        node,
-        vmid: String(vmid),
-      });
+      const qs = new URLSearchParams(
+        isNodeShell
+          ? { type: "node", node }
+          : { type: guestType, node, vmid: String(vmid) },
+      );
       ws = new WebSocket(`${proto}://${location.host}/ws/console?${qs}`);
       ws.binaryType = "arraybuffer";
 
@@ -154,6 +197,9 @@ export default function ConsolePage() {
         keepalive = setInterval(() => {
           if (ws?.readyState === WebSocket.OPEN) ws.send("2");
         }, 30_000);
+        if (autorun) {
+          fallbackTimer = setTimeout(sendAutorun, 5000);
+        }
       };
 
       ws.onmessage = (ev) => {
@@ -161,7 +207,6 @@ export default function ConsolePage() {
         if (!sawOutput) {
           sawOutput = true;
           connected = true;
-          // Keep restored scrollback; only clear the temporary "Starting…" screen.
           if (!restored) term.reset();
           sendResize();
           term.focus();
@@ -172,6 +217,7 @@ export default function ConsolePage() {
           term.write(new Uint8Array(ev.data as ArrayBuffer));
         }
         persist();
+        scheduleAutorun();
       };
 
       ws.onerror = () => {
@@ -215,6 +261,8 @@ export default function ConsolePage() {
       persist();
       window.clearTimeout(bootTimer);
       if (saveTimer) clearInterval(saveTimer);
+      if (idleTimer) clearTimeout(idleTimer);
+      if (fallbackTimer) clearTimeout(fallbackTimer);
       ro.disconnect();
       onData.dispose();
       onResizeDisposable.dispose();
@@ -228,9 +276,9 @@ export default function ConsolePage() {
       termRef.current = null;
       document.title = "ProxPanel — Proxmox Administration";
     };
-  }, [guestType, kind, name, node, vmid]);
+  }, [guestType, isNodeShell, kind, name, node, vmid, wantAutorun]);
 
-  if (!node || !vmid) {
+  if (!node || (!isNodeShell && !vmid)) {
     return (
       <div className="grid min-h-dvh place-items-center bg-bg text-muted">
         Invalid console target.
@@ -243,10 +291,14 @@ export default function ConsolePage() {
       <div className="flex items-center justify-between gap-3 border-b border-line px-3 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:px-4">
         <div className="min-w-0">
           <div className="truncate text-sm font-medium">
-            Shell · {kind} {vmid} · {name}
+            {isNodeShell
+              ? `Shell · Node ${node}${name && name !== node ? ` · ${name}` : ""}`
+              : `Shell · ${kind} ${vmid} · ${name}`}
           </div>
           <div className="text-[11px] text-muted">
-            Node {node} · keep open to resume · close only to end session
+            {isNodeShell
+              ? "Host shell · Helper Scripts run here as root · close only to end session"
+              : "keep open to resume · close only to end session"}
           </div>
         </div>
         <button

@@ -36,8 +36,12 @@ export function attachConsoleProxy(wss: WebSocketServer) {
     const type = url.searchParams.get("type");
     const node = url.searchParams.get("node");
     const vmid = url.searchParams.get("vmid");
+    const isNodeShell = type === "node";
 
-    if ((type !== "lxc" && type !== "qemu") || !node || !vmid) {
+    if (
+      !node ||
+      (!isNodeShell && ((type !== "lxc" && type !== "qemu") || !vmid))
+    ) {
       client.close(4002, "Invalid console parameters");
       return;
     }
@@ -85,17 +89,18 @@ export function attachConsoleProxy(wss: WebSocketServer) {
     });
 
     try {
-      const proxy = await pveRequest<TermProxy>(
-        session,
-        "POST",
-        `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}/termproxy`,
-      );
+      const termPath = isNodeShell
+        ? `/nodes/${encodeURIComponent(node)}/termproxy`
+        : `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid!)}/termproxy`;
+      const proxy = await pveRequest<TermProxy>(session, "POST", termPath);
 
       const hostUrl = new URL(session.host);
-      const wsUrl =
-        `wss://${hostUrl.host}/api2/json/nodes/${encodeURIComponent(node)}/` +
-        `${type}/${encodeURIComponent(vmid)}/vncwebsocket` +
-        `?port=${proxy.port}&vncticket=${encodeURIComponent(proxy.ticket)}`;
+      const wsUrl = isNodeShell
+        ? `wss://${hostUrl.host}/api2/json/nodes/${encodeURIComponent(node)}/vncwebsocket` +
+          `?port=${proxy.port}&vncticket=${encodeURIComponent(proxy.ticket)}`
+        : `wss://${hostUrl.host}/api2/json/nodes/${encodeURIComponent(node)}/` +
+          `${type}/${encodeURIComponent(vmid!)}/vncwebsocket` +
+          `?port=${proxy.port}&vncticket=${encodeURIComponent(proxy.ticket)}`;
 
       const headers: Record<string, string> = {};
       if (session.auth.kind === "ticket") {
@@ -149,13 +154,21 @@ export function attachConsoleProxy(wss: WebSocketServer) {
         shutdown(1011, err.message.slice(0, 120));
       });
     } catch (err) {
-      const message =
+      let message =
         err instanceof ProxmoxApiError
           ? err.message
           : err instanceof Error
             ? err.message
             : "Could not open console";
-      shutdown(1011, message.slice(0, 120));
+      if (
+        isNodeShell &&
+        (session.auth.kind === "token" ||
+          /token|does not look like a valid user/i.test(message))
+      ) {
+        message =
+          "Node shell needs a Proxmox password login (root@pam). API tokens cannot open the host shell.";
+      }
+      shutdown(1011, message.slice(0, 160));
     }
   });
 }

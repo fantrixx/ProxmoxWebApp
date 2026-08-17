@@ -24,6 +24,12 @@ import {
   type PowerSchedule,
 } from "./schedules.ts";
 import type { Session } from "./session.ts";
+import {
+  commandForScript,
+  findHelperScript,
+  getHelperCatalog,
+  isSafeSlug,
+} from "./helper-scripts.ts";
 
 const mediaUpload = multer({
   dest: os.tmpdir(),
@@ -1550,6 +1556,39 @@ export function registerFeatureRoutes(app: Express, helpers: RouteHelpers): void
       };
       await upsertSchedule(schedule);
       res.json({ schedule });
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  app.get("/api/marketplace", requireSession, async (req, res) => {
+    try {
+      const refresh = String(req.query.refresh || "") === "1";
+      const catalog = await getHelperCatalog(refresh);
+      res.json(catalog);
+    } catch (err) {
+      sendError(res, err);
+    }
+  });
+
+  app.get("/api/marketplace/:slug", requireSession, async (req, res) => {
+    try {
+      const slug = param(req.params.slug).toLowerCase();
+      if (!isSafeSlug(slug)) {
+        res.status(400).json({ error: "Invalid script." });
+        return;
+      }
+      const catalog = await getHelperCatalog();
+      const script = findHelperScript(catalog, slug);
+      if (!script) {
+        res.status(404).json({ error: "Script not found." });
+        return;
+      }
+      const alpine = String(req.query.alpine || "") === "1";
+      res.json({
+        script,
+        command: commandForScript(script, alpine),
+      });
     } catch (err) {
       sendError(res, err);
     }

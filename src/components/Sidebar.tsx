@@ -6,6 +6,7 @@ import {
   HardDriveDownload,
   LayoutDashboard,
   ListTodo,
+  Store,
 } from "lucide-react";
 import { AppVersionLabel } from "./AppVersion";
 import { useResources } from "../hooks";
@@ -14,6 +15,7 @@ import type { ClusterResource } from "../types";
 
 const desktopItems = [
   { to: "/", label: "Overview", icon: LayoutDashboard, exact: true },
+  { to: "/marketplace", label: "Marketplace", mobileLabel: "Apps", icon: Store },
   { to: "/backups", label: "Backups", icon: HardDriveDownload },
   { to: "/storage", label: "Storage", icon: HardDrive },
   { to: "/tasks", label: "Tasks", icon: ListTodo },
@@ -218,7 +220,7 @@ export function MobileTabBar() {
           "max(0.5rem, env(safe-area-inset-bottom, 0px), var(--prox-chrome-inset, 0px))",
       }}
     >
-      <div className="grid grid-cols-5">
+      <div className="grid grid-cols-6">
         {mobileItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(pathname, item);
@@ -226,12 +228,12 @@ export function MobileTabBar() {
             <Link
               key={item.to}
               to={item.to}
-              className={`flex min-h-12 flex-col items-center justify-center gap-1 text-[11px] ${
+              className={`flex min-h-12 flex-col items-center justify-center gap-1 text-[10px] ${
                 active ? "text-accent" : "text-muted"
               }`}
             >
               <Icon className="size-5" />
-              {item.label}
+              {"mobileLabel" in item && item.mobileLabel ? item.mobileLabel : item.label}
             </Link>
           );
         })}

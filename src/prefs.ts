@@ -23,9 +23,14 @@ export type CreatePrefs = {
   diskGiB?: string;
 };
 
+export type MarketplacePrefs = {
+  node?: string;
+};
+
 const BACKUP_KEY = "proxpanel.prefs.backup";
 const UPLOAD_KEY = "proxpanel.prefs.upload";
 const CREATE_KEY = "proxpanel.prefs.create";
+const MARKETPLACE_KEY = "proxpanel.prefs.marketplace";
 
 function readJson<T>(key: string): T | null {
   try {
@@ -67,4 +72,12 @@ export function loadCreatePrefs(): CreatePrefs {
 
 export function saveCreatePrefs(patch: CreatePrefs) {
   writeJson(CREATE_KEY, { ...loadCreatePrefs(), ...patch });
+}
+
+export function loadMarketplacePrefs(): MarketplacePrefs {
+  return readJson<MarketplacePrefs>(MARKETPLACE_KEY) || {};
+}
+
+export function saveMarketplacePrefs(patch: MarketplacePrefs) {
+  writeJson(MARKETPLACE_KEY, { ...loadMarketplacePrefs(), ...patch });
 }

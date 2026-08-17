@@ -116,6 +116,47 @@ export type Snapshot = {
 export type AuthUser = {
   username: string;
   host: string;
+  authKind?: "ticket" | "token";
+};
+
+export type MarketplaceNote = {
+  text: string;
+  type: "info" | "warning";
+};
+
+export type MarketplaceScript = {
+  slug: string;
+  name: string;
+  description: string;
+  logo: string;
+  website: string;
+  documentation: string;
+  kind: "lxc" | "vm" | "pve" | "addon" | "turnkey";
+  categories: { id: string; name: string }[];
+  privileged: boolean;
+  updateable: boolean;
+  arm: boolean;
+  port: number | null;
+  os: string;
+  osVersion: string;
+  cpu: number;
+  ramMb: number;
+  diskGb: number;
+  defaultUser: string;
+  defaultPassword: string;
+  notes: MarketplaceNote[];
+  hasAlpine: boolean;
+  command: string;
+  alpineCommand: string | null;
+  scriptUrl: string;
+  pageUrl: string;
+};
+
+export type MarketplaceCatalog = {
+  scripts: MarketplaceScript[];
+  categories: { id: string; name: string }[];
+  fetchedAt: number;
+  source: string;
 };
 
 export type GuestRates = {
