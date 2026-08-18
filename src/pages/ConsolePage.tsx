@@ -98,6 +98,7 @@ export default function ConsolePage() {
       cursorBlink: true,
       convertEol: true,
       scrollback: 5000,
+      scrollOnUserInput: true,
       fontFamily: '"IBM Plex Mono", ui-monospace, monospace',
       fontSize: isMobile ? 12 : 14,
       theme: {
@@ -118,7 +119,9 @@ export default function ConsolePage() {
     const saved = autorun ? null : readSavedBuffer(storageKey);
     let restored = false;
     if (saved) {
-      term.write(saved);
+      term.write(saved, () => {
+        if (!disposed) term.scrollToBottom();
+      });
       if (!saved.endsWith("\n") && !saved.endsWith("\r")) term.write("\r\n");
       term.writeln("\x1b[90m── previous output restored ──\x1b[0m");
       restored = true;
@@ -137,6 +140,40 @@ export default function ConsolePage() {
       }
     };
 
+    let persistSoon: ReturnType<typeof setTimeout> | undefined;
+    const schedulePersist = () => {
+      if (persistSoon) return;
+      persistSoon = setTimeout(() => {
+        persistSoon = undefined;
+        if (!disposed) persist();
+      }, 250);
+    };
+
+    const atBottom = () => {
+      const buf = term.buffer.active;
+      return buf.viewportY >= buf.baseY - 1;
+    };
+
+    let followOutput = true;
+    let scrollingSelf = false;
+    const onScrollDisposable = term.onScroll(() => {
+      if (scrollingSelf) return;
+      followOutput = atBottom();
+    });
+
+    const stickBottom = () => {
+      if (!followOutput || disposed) return;
+      scrollingSelf = true;
+      term.scrollToBottom();
+      scrollingSelf = false;
+    };
+
+    const writeOutput = (data: string | Uint8Array) => {
+      term.write(data, () => {
+        stickBottom();
+      });
+    };
+
     const sendResize = () => {
       fit.fit();
       const cols = Math.max(term.cols, 2);
@@ -144,6 +181,7 @@ export default function ConsolePage() {
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(encodeResize(cols, rows));
       }
+      stickBottom();
     };
 
     const sendAutorun = () => {
@@ -212,11 +250,11 @@ export default function ConsolePage() {
           term.focus();
         }
         if (typeof ev.data === "string") {
-          term.write(ev.data);
+          writeOutput(ev.data);
         } else {
-          term.write(new Uint8Array(ev.data as ArrayBuffer));
+          writeOutput(new Uint8Array(ev.data as ArrayBuffer));
         }
-        persist();
+        schedulePersist();
         scheduleAutorun();
       };
 
@@ -260,12 +298,14 @@ export default function ConsolePage() {
       disposed = true;
       persist();
       window.clearTimeout(bootTimer);
+      if (persistSoon) clearTimeout(persistSoon);
       if (saveTimer) clearInterval(saveTimer);
       if (idleTimer) clearTimeout(idleTimer);
       if (fallbackTimer) clearTimeout(fallbackTimer);
       ro.disconnect();
       onData.dispose();
       onResizeDisposable.dispose();
+      onScrollDisposable.dispose();
       if (keepalive) clearInterval(keepalive);
       window.removeEventListener("resize", onWinResize);
       window.removeEventListener("pagehide", onHide);
@@ -312,7 +352,7 @@ export default function ConsolePage() {
       </div>
       <div
         ref={wrapRef}
-        className="min-h-0 flex-1 cursor-text bg-bg p-2"
+        className="min-h-0 flex-1 cursor-text overflow-hidden bg-bg p-2"
         onClick={() => termRef.current?.focus()}
       />
     </div>

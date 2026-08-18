@@ -96,13 +96,18 @@ body {
   background-size: auto, 48px 48px, 48px 48px;
 }
 
+.xterm {
+  height: 100%;
+  width: 100%;
+}
+
 .xterm,
 .xterm-viewport {
   background: transparent !important;
 }
 
-.xterm-screen {
-  padding: 8px;
+.xterm-viewport {
+  overflow-y: auto !important;
 }
 
 ::-webkit-scrollbar {
