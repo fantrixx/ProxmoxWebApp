@@ -263,7 +263,15 @@ export function GuestCard({
             {running ? ` · ${formatUptime(guest.uptime)}` : ""}
           </p>
           <div className="mt-2">
-            <IpList ips={guest.ips} />
+            <IpList
+              ips={guest.ips}
+              name={guest.name}
+              tags={guest.tags}
+              guestType={type}
+              node={guest.node}
+              type={type}
+              vmid={guest.vmid}
+            />
           </div>
         </div>
         <ServiceIcon

@@ -166,7 +166,15 @@ export default function GuestDetail() {
                 {guestLabel(guestType)} {vmid}
               </span>
               <span className="text-sm text-muted">{formatUptime(status?.uptime)}</span>
-              <IpList ips={q.data?.ips} />
+              <IpList
+                ips={q.data?.ips}
+                name={name}
+                tags={tags}
+                guestType={guestType}
+                node={node}
+                type={guestType}
+                vmid={vmid}
+              />
             </div>
             <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
               {running ? (

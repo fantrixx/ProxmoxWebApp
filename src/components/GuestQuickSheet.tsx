@@ -180,7 +180,15 @@ export function GuestQuickSheet({
                 pending={pending}
               />
               <span className="text-xs text-muted">{formatUptime(guest.uptime)}</span>
-              <IpList ips={guest.ips} />
+              <IpList
+                ips={guest.ips}
+                name={name}
+                tags={guest.tags}
+                guestType={type}
+                node={node}
+                type={type}
+                vmid={vmid}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-2">
