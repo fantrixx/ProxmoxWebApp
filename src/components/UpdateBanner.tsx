@@ -91,14 +91,7 @@ async function waitForAppRestart(signal: AbortSignal): Promise<void> {
   }
 }
 
-export function UpdateBanner({
-  className = "",
-  canUpdate = false,
-}: {
-  className?: string;
-  /** When true, allow triggering an in-app update if the host supports it. */
-  canUpdate?: boolean;
-}) {
+function useInAppUpdate() {
   const q = useQuery({
     queryKey: ["app-version"],
     queryFn: () => metaApi.version(true),
@@ -109,12 +102,10 @@ export function UpdateBanner({
     retry: 1,
   });
   const info = q.data;
-  const [dismissed, setDismissed] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const showUpdateButton = Boolean(canUpdate && info?.canUpdate);
 
   useEffect(() => {
     return () => {
@@ -160,10 +151,107 @@ export function UpdateBanner({
             : "Update failed.";
       setUpdateError(message);
       setUpdating(false);
-      // Refresh version info — rollback may still show update available.
       void q.refetch();
     }
   }
+
+  return {
+    info,
+    confirmOpen,
+    setConfirmOpen,
+    updating,
+    updateError,
+    runUpdate,
+    canRun: Boolean(info?.canUpdate),
+  };
+}
+
+function UpdateConfirm({
+  updating,
+  onCancel,
+  onConfirm,
+}: {
+  updating: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <ConfirmDialog
+      title="Update ProxPanel now?"
+      body="This pulls the latest version from GitHub, rebuilds the app, and restarts the ProxPanel service. If the update fails, the previous working version is restored automatically. The UI will be briefly unavailable and you may need to sign in again."
+      confirmLabel="Update now"
+      busy={updating}
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
+  );
+}
+
+/** Compact header control — shown on every signed-in page when an update is available. */
+export function HeaderUpdateButton() {
+  const {
+    info,
+    confirmOpen,
+    setConfirmOpen,
+    updating,
+    updateError,
+    runUpdate,
+    canRun,
+  } = useInAppUpdate();
+
+  if (!info?.updateAvailable || !canRun) return null;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setConfirmOpen(true)}
+        disabled={updating}
+        title="Update ProxPanel now"
+        className="inline-flex min-h-8 items-center gap-1 rounded-lg bg-accent px-2 py-1 text-[11px] font-semibold text-black hover:bg-accent-2 disabled:opacity-60 md:min-h-9 md:px-2.5 md:text-xs"
+      >
+        {updating ? (
+          <LoaderCircle className="size-3.5 animate-spin" />
+        ) : (
+          <Download className="size-3.5" />
+        )}
+        {updating ? "Updating…" : "Update now"}
+      </button>
+      {updateError ? (
+        <span className="hidden max-w-40 truncate text-[10px] text-bad md:inline" title={updateError}>
+          {updateError}
+        </span>
+      ) : null}
+      {confirmOpen ? (
+        <UpdateConfirm
+          updating={updating}
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={() => void runUpdate()}
+        />
+      ) : null}
+    </>
+  );
+}
+
+export function UpdateBanner({
+  className = "",
+  canUpdate = false,
+}: {
+  className?: string;
+  /** When true, allow triggering an in-app update if the host supports it. */
+  canUpdate?: boolean;
+}) {
+  const {
+    info,
+    confirmOpen,
+    setConfirmOpen,
+    updating,
+    updateError,
+    runUpdate,
+    canRun,
+  } = useInAppUpdate();
+  const [dismissed, setDismissed] = useState(false);
+  const showUpdateButton = Boolean(canUpdate && canRun);
 
   // Dismiss only for this page view — a reload runs a fresh check again.
   if (dismissed || !info?.updateAvailable) {
@@ -244,11 +332,8 @@ export function UpdateBanner({
       </div>
 
       {confirmOpen ? (
-        <ConfirmDialog
-          title="Update ProxPanel now?"
-          body="This pulls the latest version from GitHub, rebuilds the app, and restarts the ProxPanel service. If the update fails, the previous working version is restored automatically. The UI will be briefly unavailable and you may need to sign in again."
-          confirmLabel="Update now"
-          busy={updating}
+        <UpdateConfirm
+          updating={updating}
           onCancel={() => setConfirmOpen(false)}
           onConfirm={() => void runUpdate()}
         />

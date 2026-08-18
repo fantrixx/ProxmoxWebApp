@@ -4,7 +4,6 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Header } from "../components/Header";
 import { GuestCard } from "../components/GuestCard";
 import { CreateGuestDialog } from "../components/CreateGuestDialog";
-import { UpdateBanner } from "../components/UpdateBanner";
 import { useGuestRates, useResources } from "../hooks";
 import type { GuestType } from "../types";
 
@@ -118,8 +117,6 @@ export default function Dashboard() {
         }
       />
       <div className="space-y-4 px-4 py-3 md:space-y-8 md:px-8 md:py-6">
-        <UpdateBanner canUpdate />
-
         {q.isError ? (
           <p className="rounded-xl border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad">
             {(q.error as Error).message}

@@ -45,9 +45,7 @@ function updateBinary(): string | null {
     return "/usr/local/bin/proxpanel-update";
   }
   const script = path.join(ROOT, "ct/proxpanel.sh");
-  if (existsSync(script) && existsSync("/etc/systemd/system/proxpanel.service")) {
-    return script;
-  }
+  if (existsSync(script)) return script;
   return null;
 }
 
