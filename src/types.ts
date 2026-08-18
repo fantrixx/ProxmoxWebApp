@@ -150,6 +150,7 @@ export type MarketplaceScript = {
   alpineCommand: string | null;
   scriptUrl: string;
   pageUrl: string;
+  installs: number;
 };
 
 export type MarketplaceCatalog = {

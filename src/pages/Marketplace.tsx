@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  ArrowDownUp,
   Copy,
   ExternalLink,
   RefreshCw,
@@ -10,11 +11,13 @@ import {
 import { dataApi } from "../api";
 import { Header } from "../components/Header";
 import { useApp } from "../context";
+import { formatCompactCount } from "../format";
 import { useResources } from "../hooks";
 import {
   loadCreatePrefs,
   loadMarketplacePrefs,
   saveMarketplacePrefs,
+  type MarketplaceSort,
 } from "../prefs";
 import type { MarketplaceScript } from "../types";
 
@@ -83,6 +86,9 @@ export default function MarketplacePage() {
   const [qtext, setQtext] = useState("");
   const [kind, setKind] = useState<KindFilter>("lxc");
   const [category, setCategory] = useState("all");
+  const [sort, setSort] = useState<MarketplaceSort>(
+    () => (loadMarketplacePrefs().sort === "popular" ? "popular" : "name"),
+  );
   const [selected, setSelected] = useState<MarketplaceScript | null>(null);
   const [alpine, setAlpine] = useState(false);
   const [node, setNode] = useState(
@@ -94,7 +100,7 @@ export default function MarketplacePage() {
   const view = useMemo(() => {
     const scripts = catalog.data?.scripts || [];
     const needle = qtext.trim().toLowerCase();
-    return scripts.filter((s) => {
+    const filtered = scripts.filter((s) => {
       if (kind === "lxc" && s.kind !== "lxc") return false;
       if (kind === "vm" && s.kind !== "vm") return false;
       if (kind === "host" && !isHostKind(s.kind)) return false;
@@ -103,7 +109,13 @@ export default function MarketplacePage() {
       const hay = `${s.name} ${s.slug} ${s.description} ${s.categories.map((c) => c.name).join(" ")}`.toLowerCase();
       return hay.includes(needle);
     });
-  }, [catalog.data?.scripts, category, kind, qtext]);
+    if (sort !== "popular") return filtered;
+    return [...filtered].sort((a, b) => {
+      const byInstalls = (b.installs || 0) - (a.installs || 0);
+      if (byInstalls !== 0) return byInstalls;
+      return a.name.localeCompare(b.name);
+    });
+  }, [catalog.data?.scripts, category, kind, qtext, sort]);
 
   const categories = useMemo(() => {
     const scripts = catalog.data?.scripts || [];
@@ -209,6 +221,28 @@ export default function MarketplacePage() {
             </div>
             <button
               type="button"
+              onClick={() => {
+                const next: MarketplaceSort = sort === "popular" ? "name" : "popular";
+                setSort(next);
+                saveMarketplacePrefs({ sort: next });
+              }}
+              aria-pressed={sort === "popular"}
+              className={`inline-flex items-center gap-1 rounded-xl border px-3 py-2 text-xs ${
+                sort === "popular"
+                  ? "border-accent bg-accent/10 text-ink"
+                  : "border-line text-muted hover:bg-surface-2 hover:text-ink"
+              }`}
+              title={
+                sort === "popular"
+                  ? "Showing most installed scripts. Click for A–Z."
+                  : "Sort by community install count"
+              }
+            >
+              <ArrowDownUp className="size-3.5" />
+              {sort === "popular" ? "Popular" : "A–Z"}
+            </button>
+            <button
+              type="button"
               onClick={() => void catalog.refetch()}
               className="rounded-lg border border-line p-2 text-muted hover:bg-surface-2 hover:text-ink"
               title="Refresh catalog"
@@ -246,7 +280,9 @@ export default function MarketplacePage() {
         ) : (
           <>
             <p className="mb-3 text-[11px] tabular-nums text-muted">
-              {view.length} script{view.length === 1 ? "" : "s"} · data from {catalog.data?.source}
+              {view.length} script{view.length === 1 ? "" : "s"}
+              {sort === "popular" ? " · most popular first" : ""}
+              {" · "}data from {catalog.data?.source}
             </p>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {view.map((script) => (
@@ -267,7 +303,16 @@ export default function MarketplacePage() {
                     <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted">
                       {script.description || "Community Helper Script"}
                     </p>
-                    <p className="mt-2 text-[11px] text-muted">{resourceLine(script) || "Default resources"}</p>
+                    <p className="mt-2 text-[11px] text-muted">
+                      {[
+                        resourceLine(script) || "Default resources",
+                        script.installs > 0
+                          ? `${formatCompactCount(script.installs)} installs`
+                          : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
                   </div>
                 </button>
               ))}
@@ -303,7 +348,16 @@ export default function MarketplacePage() {
               <p className="text-sm leading-relaxed text-muted">
                 {selected.description || "Community Helper Script for Proxmox VE."}
               </p>
-              <p className="text-xs text-muted">{resourceLine(selected)}</p>
+              <p className="text-xs text-muted">
+                {[
+                  resourceLine(selected),
+                  selected.installs > 0
+                    ? `${formatCompactCount(selected.installs)} community installs`
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
 
               {selected.notes.length > 0 ? (
                 <ul className="space-y-1.5">

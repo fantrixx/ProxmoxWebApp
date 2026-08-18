@@ -23,8 +23,11 @@ export type CreatePrefs = {
   diskGiB?: string;
 };
 
+export type MarketplaceSort = "name" | "popular";
+
 export type MarketplacePrefs = {
   node?: string;
+  sort?: MarketplaceSort;
 };
 
 const BACKUP_KEY = "proxpanel.prefs.backup";

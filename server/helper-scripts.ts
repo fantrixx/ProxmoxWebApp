@@ -1,6 +1,7 @@
 import { fetch as undiciFetch } from "undici";
 
 const PB_URL = "https://db.community-scripts.org";
+const TELEMETRY_URL = "https://telemetry.community-scripts.org/api/scripts";
 const GH_RAW = "https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main";
 const GH_RAW_DEV = "https://raw.githubusercontent.com/community-scripts/ProxmoxVED/main";
 const CACHE_MS = 30 * 60 * 1000;
@@ -41,6 +42,7 @@ export type HelperScript = {
   alpineCommand: string | null;
   scriptUrl: string;
   pageUrl: string;
+  installs: number;
 };
 
 export type HelperCatalog = {
@@ -235,7 +237,31 @@ function mapScript(raw: unknown): HelperScript | null {
     alpineCommand: alpineOk && alpinePath ? installCommand(alpinePath, isDev) : null,
     scriptUrl: `${rawBase(isDev)}/${defaultPath}`,
     pageUrl: `https://community-scripts.org/scripts/${encodeURIComponent(slug)}`,
+    installs: 0,
   };
+}
+
+async function fetchInstallCounts(): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  try {
+    const res = await undiciFetch(TELEMETRY_URL, {
+      headers: { Accept: "application/json", "User-Agent": "ProxPanel-Marketplace" },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return counts;
+    const body = (await res.json()) as { top_scripts?: unknown };
+    const list = Array.isArray(body.top_scripts) ? body.top_scripts : [];
+    for (const item of list) {
+      const rec = asRecord(item);
+      const slug = asString(rec?.app).toLowerCase();
+      const total = asNumber(rec?.total);
+      if (!isSafeSlug(slug) || total <= 0) continue;
+      counts.set(slug, Math.max(counts.get(slug) || 0, total));
+    }
+  } catch {
+    /* popularity is optional; catalog still works without it */
+  }
+  return counts;
 }
 
 async function fetchPage(page: number, perPage: number): Promise<{
@@ -267,6 +293,7 @@ async function fetchPage(page: number, perPage: number): Promise<{
 }
 
 async function loadCatalog(): Promise<HelperCatalog> {
+  const countsPromise = fetchInstallCounts();
   const items: unknown[] = [];
   const perPage = 200;
   const first = await fetchPage(1, perPage);
@@ -275,12 +302,14 @@ async function loadCatalog(): Promise<HelperCatalog> {
     const next = await fetchPage(page, perPage);
     items.push(...next.items);
   }
+  const counts = await countsPromise;
 
   const scripts: HelperScript[] = [];
   const catMap = new Map<string, string>();
   for (const item of items) {
     const mapped = mapScript(item);
     if (!mapped) continue;
+    mapped.installs = counts.get(mapped.slug) || 0;
     scripts.push(mapped);
     for (const cat of mapped.categories) {
       if (!catMap.has(cat.id)) catMap.set(cat.id, cat.name);

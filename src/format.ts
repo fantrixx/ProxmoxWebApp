@@ -1,3 +1,12 @@
+export function formatCompactCount(n: number | undefined | null): string {
+  if (n == null || !Number.isFinite(n) || n <= 0) return "";
+  const abs = Math.abs(n);
+  const trim = (value: number) => value.toFixed(1).replace(/\.0$/, "");
+  if (abs >= 1_000_000) return `${trim(abs / 1_000_000)}M`;
+  if (abs >= 1_000) return `${trim(abs / 1_000)}k`;
+  return String(Math.round(abs));
+}
+
 export function formatBytes(n: number | undefined | null): string {
   if (n == null || Number.isNaN(n)) return "—";
   const abs = Math.abs(n);
