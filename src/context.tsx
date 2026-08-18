@@ -3,6 +3,7 @@ import { dataApi } from "./api";
 import { newId } from "./id";
 import { rememberBackupSettings } from "./quickBackup";
 import type { AuthUser, GuestType } from "./types";
+import { markVisit } from "./visit";
 
 export type ConsoleTarget = {
   type: GuestType;
@@ -187,6 +188,8 @@ export function AppProvider({
 }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [jobs, setJobs] = useState<ActiveJob[]>(() => loadJobs());
+
+  markVisit();
 
   useEffect(() => {
     saveJobs(jobs);

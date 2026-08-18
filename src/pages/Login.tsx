@@ -5,6 +5,7 @@ import { Cpu } from "lucide-react";
 import { ApiError, authApi } from "../api";
 import { AppVersionLabel } from "../components/AppVersion";
 import { UpdateBanner } from "../components/UpdateBanner";
+import { markVisit } from "../visit";
 
 const LOGIN_PREFS_KEY = "proxpanel.login";
 
@@ -108,6 +109,7 @@ export default function Login() {
         useEnvToken,
       });
       saveLoginPrefs({ host, username, realm, checkCert });
+      markVisit(true);
       qc.setQueryData(["me"], user);
       navigate("/", { replace: true });
     } catch (err) {

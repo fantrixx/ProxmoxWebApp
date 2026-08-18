@@ -7,6 +7,23 @@ export function formatCompactCount(n: number | undefined | null): string {
   return String(Math.round(abs));
 }
 
+export function formatRelativeTime(epochSec?: number): string {
+  if (!epochSec) return "—";
+  const delta = Date.now() - epochSec * 1000;
+  const sec = Math.round(delta / 1000);
+  if (sec < 45) return "just now";
+  if (sec < 90) return "a minute ago";
+  const min = Math.round(sec / 60);
+  if (min < 50) return `${min} min ago`;
+  const hr = Math.round(min / 60);
+  if (hr === 1) return "an hour ago";
+  if (hr < 24) return `${hr} hours ago`;
+  const day = Math.round(hr / 24);
+  if (day === 1) return "yesterday";
+  if (day < 7) return `${day} days ago`;
+  return formatSnapTime(epochSec);
+}
+
 export function formatBytes(n: number | undefined | null): string {
   if (n == null || Number.isNaN(n)) return "—";
   const abs = Math.abs(n);
