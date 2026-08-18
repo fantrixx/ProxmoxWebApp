@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Copy, ExternalLink } from "lucide-react";
 import { dataApi } from "../api";
@@ -59,7 +60,7 @@ export function IpList({
   iconSlug?: string | null;
 }) {
   const { toast } = useApp();
-  const [selected, setSelected] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{ ip: string; anchor: HTMLElement } | null>(null);
   const catalog = useQuery({
     queryKey: ["marketplace"],
     queryFn: () => dataApi.marketplace(),
@@ -79,8 +80,8 @@ export function IpList({
     return <span className="font-mono text-[11px] text-muted">no IP</span>;
   }
 
-  const web = selected
-    ? resolveGuestWebUi(selected, catalog.data?.scripts, {
+  const web = menu
+    ? resolveGuestWebUi(menu.ip, catalog.data?.scripts, {
         name,
         tags,
         guestType,
@@ -92,13 +93,13 @@ export function IpList({
     const ok = await copyText(ip);
     if (ok) toast("ok", `${ip} copied`);
     else toast("err", "Could not copy IP");
-    setSelected(null);
+    setMenu(null);
   }
 
   function openUi() {
     if (!web) return;
     window.open(web.url, "_blank", "noopener,noreferrer");
-    setSelected(null);
+    setMenu(null);
   }
 
   return (
@@ -109,116 +110,144 @@ export function IpList({
             key={ip}
             type="button"
             title="Copy IP or open Web UI"
+            aria-haspopup="menu"
+            aria-expanded={menu?.ip === ip}
             onPointerDown={(e) => e.stopPropagation()}
             onPointerUp={(e) => e.stopPropagation()}
             onContextMenu={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
-              setSelected(ip);
+              const target = e.currentTarget;
+              setMenu((cur) =>
+                cur?.ip === ip ? null : { ip, anchor: target },
+              );
             }}
-            className="select-all rounded-md bg-bg px-1.5 py-0.5 font-mono text-[11px] text-cyan hover:bg-surface-2"
+            className={`select-all rounded-md px-1.5 py-0.5 font-mono text-[11px] text-cyan hover:bg-surface-2 ${
+              menu?.ip === ip ? "bg-surface-2" : "bg-bg"
+            }`}
           >
             {ip}
           </button>
         ))}
       </span>
 
-      {selected ? (
-        <IpActionDialog
-          ip={selected}
-          web={web}
+      {menu ? (
+        <IpPopupMenu
+          anchor={menu.anchor}
           lookingUp={catalog.isLoading}
-          onCopy={() => void copy(selected)}
+          openLabel={web?.label ? `Open ${web.label}` : "Open in browser"}
+          openUrl={web?.url || ""}
+          onCopy={() => void copy(menu.ip)}
           onOpen={openUi}
-          onClose={() => setSelected(null)}
+          onClose={() => setMenu(null)}
         />
       ) : null}
     </>
   );
 }
 
-function IpActionDialog({
-  ip,
-  web,
+function IpPopupMenu({
+  anchor,
   lookingUp,
+  openLabel,
+  openUrl,
   onCopy,
   onOpen,
   onClose,
 }: {
-  ip: string;
-  web: ReturnType<typeof resolveGuestWebUi> | null;
+  anchor: HTMLElement;
   lookingUp: boolean;
+  openLabel: string;
+  openUrl: string;
   onCopy: () => void;
   onOpen: () => void;
   onClose: () => void;
 }) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState(() => {
+    const r = anchor.getBoundingClientRect();
+    return { top: r.bottom + 4, left: r.left };
+  });
+
+  useLayoutEffect(() => {
+    const menu = menuRef.current;
+    if (!menu) return;
+    const r = anchor.getBoundingClientRect();
+    const w = menu.offsetWidth;
+    const h = menu.offsetHeight;
+    const gap = 4;
+    const spaceBelow = window.innerHeight - r.bottom;
+    const openAbove = spaceBelow < h + 8 && r.top > h + 8;
+    const top = openAbove ? r.top - h - gap : r.bottom + gap;
+    const left = Math.min(
+      Math.max(8, r.left),
+      Math.max(8, window.innerWidth - w - 8),
+    );
+    setPos({ top, left });
+  }, [anchor, lookingUp, openLabel, openUrl]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
+    const onScroll = () => onClose();
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onClose);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onClose);
+    };
   }, [onClose]);
 
-  const openLabel = web?.label ? `Open ${web.label}` : "Open in browser";
-  const openHint = lookingUp
-    ? "Looking up the Web UI port…"
-    : web?.url || "";
-
-  return (
-    <div
-      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:items-center sm:p-6"
-      onPointerDown={(e) => e.stopPropagation()}
-      onClick={(e) => e.stopPropagation()}
-    >
+  return createPortal(
+    <>
       <button
         type="button"
-        className="absolute inset-0 cursor-default"
-        aria-label="Close"
-        onClick={onClose}
+        className="fixed inset-0 z-[80] cursor-default"
+        aria-label="Close menu"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
       />
       <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="ip-action-title"
-        className="relative z-10 w-full max-w-sm rounded-2xl border border-line bg-surface p-5 shadow-2xl"
+        ref={menuRef}
+        role="menu"
+        className="fixed z-[81] min-w-48 overflow-hidden rounded-xl border border-line bg-bg py-1 shadow-xl"
+        style={{ top: pos.top, left: pos.left }}
+        onPointerDown={(e) => e.stopPropagation()}
       >
-        <h2 id="ip-action-title" className="text-lg font-semibold tracking-tight">
-          {ip}
-        </h2>
-        <p className="mt-1 text-sm text-muted">Copy the address or open the Web UI.</p>
-        <div className="mt-4 flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={onCopy}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-line px-3 py-2 text-sm hover:bg-surface-2"
-          >
-            <Copy className="size-3.5" />
-            Copy IP
-          </button>
-          <button
-            type="button"
-            onClick={onOpen}
-            disabled={lookingUp}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-accent px-3 py-2 text-sm font-medium text-black hover:bg-accent-2 disabled:opacity-40"
-          >
-            <ExternalLink className="size-3.5" />
-            {lookingUp ? "Looking up Web UI…" : openLabel}
-          </button>
-          {openHint ? (
-            <p className="truncate text-center font-mono text-[11px] text-muted">
-              {openHint}
-            </p>
-          ) : null}
-          <button
-            type="button"
-            onClick={onClose}
-            className="min-h-11 rounded-xl px-3 py-2 text-sm text-muted hover:bg-surface-2 hover:text-ink sm:min-h-0"
-          >
-            Cancel
-          </button>
-        </div>
+        <button
+          type="button"
+          role="menuitem"
+          onClick={onCopy}
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface-2"
+        >
+          <Copy className="size-3.5 shrink-0 text-muted" />
+          Copy IP
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          onClick={onOpen}
+          disabled={lookingUp}
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface-2 disabled:opacity-40"
+        >
+          <ExternalLink className="size-3.5 shrink-0 text-muted" />
+          <span className="min-w-0">
+            <span className="block">{lookingUp ? "Looking up Web UI…" : openLabel}</span>
+            {openUrl && !lookingUp ? (
+              <span className="mt-0.5 block truncate font-mono text-[10px] text-muted">
+                {openUrl.replace(/^https?:\/\//, "")}
+              </span>
+            ) : null}
+          </span>
+        </button>
       </div>
-    </div>
+    </>,
+    document.body,
   );
 }
