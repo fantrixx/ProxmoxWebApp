@@ -1,5 +1,12 @@
 import type { PveTask } from "./types";
 
+export type TaskGuest = {
+  name: string;
+  kind: "CT" | "VM";
+};
+
+export type TaskGuestMap = Map<string, TaskGuest>;
+
 /** UPID:<node>:<pid>:<pstart>:<starttime>:<type>:<id>:<user> */
 export function parseUpid(upid: string): {
   node?: string;
@@ -59,32 +66,90 @@ export function taskKind(type?: string): TaskKind {
   return "other";
 }
 
-function targetName(
-  task: PveTask,
-  names: Map<string, string>,
-): string | null {
-  const parsed = parseUpid(task.upid);
-  const id = task.id || parsed.id;
-  if (!id || id === "-") return null;
-  const named = names.get(id);
-  if (named) return named;
-  if (/^\d+$/.test(id)) {
-    const type = (task.type || parsed.type || "").toLowerCase();
-    const isVm = type.startsWith("qm");
-    return isVm ? `VM ${id}` : `container ${id}`;
-  }
-  return id;
+export function taskKindLabel(type?: string): string {
+  const t = (type || "").toLowerCase();
+  if (t === "vzdump") return "Backup";
+  if (t.includes("restore")) return "Restore";
+  if (t.includes("shutdown")) return "Shutdown";
+  if (t.includes("reboot") || t.includes("reset")) return "Restart";
+  if (t.includes("start")) return "Start";
+  if (t.includes("stop")) return "Stop";
+  if (t.includes("suspend")) return "Pause";
+  if (t.includes("resume")) return "Resume";
+  if (t.includes("delsnapshot")) return "Delete snapshot";
+  if (t.includes("rollback")) return "Rollback";
+  if (t.includes("snapshot")) return "Snapshot";
+  if (t.includes("clone") || t === "imgcopy") return "Copy";
+  if (t.includes("migrat")) return "Migrate";
+  if (t.includes("move")) return "Move disk";
+  if (t === "aptupdate") return "Package list";
+  if (t === "aptupgrade") return "Upgrade";
+  if (!t) return "Task";
+  return t.replace(/^qm/, "VM ").replace(/^vz/, "CT ");
 }
 
-export function describeTask(
-  task: PveTask,
-  names: Map<string, string>,
-): { title: string; detail: string; kind: TaskKind; outcome: TaskOutcome } {
+export function formatTaskUser(user?: string): string | null {
+  if (!user) return null;
+  if (user.endsWith("@pam")) return user.slice(0, -4);
+  return user;
+}
+
+export type TaskTarget = {
+  id: string | null;
+  kind: "CT" | "VM" | null;
+  name: string | null;
+  /** Short id label such as "CT 105" or "VM 201". */
+  tag: string | null;
+  /** Name if known, otherwise the tag — used in the title sentence. */
+  display: string | null;
+};
+
+export function taskTarget(task: PveTask, guests: TaskGuestMap): TaskTarget {
+  const parsed = parseUpid(task.upid);
+  const id = task.id || parsed.id;
+  if (!id || id === "-") {
+    return { id: null, kind: null, name: null, tag: null, display: null };
+  }
+  const known = guests.get(id);
+  const type = (task.type || parsed.type || "").toLowerCase();
+  let kind: "CT" | "VM" | null = known?.kind ?? null;
+  if (!kind) {
+    if (type.startsWith("qm")) kind = "VM";
+    else if (type.startsWith("vz")) kind = "CT";
+  }
+  const name = known?.name || null;
+  const tag = /^\d+$/.test(id) ? (kind ? `${kind} ${id}` : `#${id}`) : id;
+  return { id, kind, name, tag, display: name || tag };
+}
+
+function failStatusNote(task: PveTask, outcome: TaskOutcome): string | null {
+  if (outcome !== "fail") return null;
+  const raw = (task.status || "").trim();
+  if (!raw) return "Failed";
+  const s = raw.toLowerCase();
+  if (s === "ok" || s === "running" || s === "stopped") return "Failed";
+  return raw;
+}
+
+export type TaskCopy = {
+  title: string;
+  kind: TaskKind;
+  kindLabel: string;
+  outcome: TaskOutcome;
+  node: string;
+  userLabel: string | null;
+  target: TaskTarget;
+  statusNote: string | null;
+  typeKey: string;
+};
+
+export function describeTask(task: PveTask, guests: TaskGuestMap): TaskCopy {
   const parsed = parseUpid(task.upid);
   const type = (task.type || parsed.type || "").toLowerCase();
   const node = task.node || parsed.node || "the host";
-  const who = task.user || parsed.user;
-  const name = targetName(task, names);
+  const who = formatTaskUser(task.user || parsed.user);
+  const target = taskTarget(task, guests);
+  const name = target.display;
   const outcome = taskOutcome(task);
   const kind = taskKind(type);
   const running = outcome === "running";
@@ -229,10 +294,17 @@ export function describeTask(
     }
   }
 
-  const bits = [node];
-  if (who && !who.startsWith("root@")) bits.push(who);
-  else if (who) bits.push("root");
-  return { title, detail: bits.join(" · "), kind, outcome };
+  return {
+    title,
+    kind,
+    kindLabel: taskKindLabel(type),
+    outcome,
+    node,
+    userLabel: who,
+    target,
+    statusNote: failStatusNote(task, outcome),
+    typeKey: type || "task",
+  };
 }
 
 export function summarizeSince(tasks: PveTask[]): string[] {

@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { dataApi } from "../api";
 import { Header } from "../components/Header";
-import { formatDuration, formatRelativeTime } from "../format";
+import { formatClockTime, formatDuration, formatRelativeTime } from "../format";
 import { useResources } from "../hooks";
 import {
   describeTask,
@@ -25,6 +25,7 @@ import {
   summarizeSince,
   taskKind,
   taskOutcome,
+  type TaskGuestMap,
   type TaskKind,
 } from "../taskCopy";
 import type { PveTask } from "../types";
@@ -43,11 +44,14 @@ const KIND_ICON: Record<TaskKind, typeof Power> = {
   other: ListTodo,
 };
 
-function guestNames(resources: ReturnType<typeof useResources>["data"]): Map<string, string> {
-  const map = new Map<string, string>();
+function guestIndex(resources: ReturnType<typeof useResources>["data"]): TaskGuestMap {
+  const map: TaskGuestMap = new Map();
   for (const r of resources?.resources || []) {
-    if ((r.type === "lxc" || r.type === "qemu") && r.vmid != null && r.name) {
-      map.set(String(r.vmid), r.name);
+    if ((r.type === "lxc" || r.type === "qemu") && r.vmid != null) {
+      map.set(String(r.vmid), {
+        name: r.name || `${r.type === "qemu" ? "VM" : "CT"} ${r.vmid}`,
+        kind: r.type === "qemu" ? "VM" : "CT",
+      });
     }
   }
   return map;
@@ -106,43 +110,78 @@ function OutcomeBadge({ task }: { task: PveTask }) {
   );
 }
 
-function TaskRow({ task, names }: { task: PveTask; names: Map<string, string> }) {
+function MetaSep() {
+  return <span className="text-line-2">·</span>;
+}
+
+function TaskRow({ task, guests }: { task: PveTask; guests: TaskGuestMap }) {
   const [open, setOpen] = useState(false);
   const parsed = parseUpid(task.upid);
   const node = task.node || parsed.node || "?";
-  const copy = describeTask(task, names);
+  const copy = describeTask(task, guests);
   const Icon = KIND_ICON[copy.kind];
-  const duration =
-    task.starttime && task.endtime && task.endtime >= task.starttime
-      ? formatDuration(task.endtime - task.starttime)
-      : null;
+  const running = copy.outcome === "running";
+  const elapsedSec = task.starttime
+    ? running
+      ? Math.max(0, Date.now() / 1000 - task.starttime)
+      : null
+    : null;
+  const durationSec =
+    !running && task.starttime && task.endtime && task.endtime >= task.starttime
+      ? task.endtime - task.starttime
+      : elapsedSec;
+  const duration = durationSec != null ? formatDuration(durationSec) : null;
+  const durationLabel = duration ? (running ? `${duration} so far` : duration) : null;
+  const meta: string[] = [];
+  if (copy.target.tag && copy.target.name) meta.push(copy.target.tag);
+  else if (copy.target.tag && !copy.title.includes(copy.target.tag)) meta.push(copy.target.tag);
+  meta.push(copy.node);
+  if (durationLabel) meta.push(durationLabel);
+  if (copy.userLabel) meta.push(copy.userLabel);
+  meta.push(formatClockTime(task.starttime));
+  const relative = formatRelativeTime(task.starttime);
+  if (relative !== "just now" && relative !== "—") meta.push(relative);
 
   return (
     <div className="rounded-xl border border-line bg-surface">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm hover:bg-surface-2/50 md:px-4 md:py-3"
+        className="flex w-full items-start gap-2.5 px-3 py-2.5 text-left text-sm hover:bg-surface-2/50 md:items-center md:gap-3 md:px-4 md:py-3"
       >
         {open ? (
-          <ChevronDown className="size-4 shrink-0 text-muted" />
+          <ChevronDown className="mt-0.5 size-4 shrink-0 text-muted md:mt-0" />
         ) : (
-          <ChevronRight className="size-4 shrink-0 text-muted" />
+          <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted md:mt-0" />
         )}
-        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-bg text-muted">
+        <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-bg text-muted md:mt-0">
           <Icon className="size-3.5" />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="truncate font-medium">{copy.title}</div>
-          <div className="truncate text-[11px] text-muted">
-            {copy.detail}
-            {duration ? ` · ${duration}` : ""}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="font-medium leading-snug">{copy.title}</span>
+            <span
+              className="rounded-md bg-bg px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted"
+              title={copy.typeKey}
+            >
+              {copy.kindLabel}
+            </span>
           </div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] leading-relaxed text-muted">
+            {meta.map((bit, i) => (
+              <span key={`${bit}-${i}`} className="inline-flex items-center gap-1.5">
+                {i > 0 ? <MetaSep /> : null}
+                {bit}
+              </span>
+            ))}
+          </div>
+          {copy.statusNote ? (
+            <div className="mt-1 line-clamp-2 text-[11px] leading-snug text-bad">
+              {copy.statusNote}
+            </div>
+          ) : null}
         </div>
         <OutcomeBadge task={task} />
-        <span className="hidden shrink-0 text-xs text-muted sm:inline">
-          {formatRelativeTime(task.starttime)}
-        </span>
       </button>
       {open ? <TaskLog node={node} upid={task.upid} /> : null}
     </div>
@@ -184,7 +223,7 @@ export default function TasksPage() {
     refetchInterval: 3000,
   });
   const resources = useResources();
-  const names = useMemo(() => guestNames(resources.data), [resources.data]);
+  const guests = useMemo(() => guestIndex(resources.data), [resources.data]);
 
   const tasks = Array.isArray(q.data?.tasks) ? q.data.tasks : [];
   const sinceTasks = tasks.filter((t) => (t.starttime || 0) * 1000 >= cutoffMs);
@@ -258,7 +297,7 @@ export default function TasksPage() {
         ) : (
           <div className="space-y-1.5 md:space-y-2">
             {view.map((task) => (
-              <TaskRow key={task.upid} task={task} names={names} />
+              <TaskRow key={task.upid} task={task} guests={guests} />
             ))}
           </div>
         )}

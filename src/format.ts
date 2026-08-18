@@ -91,6 +91,32 @@ export function formatSnapTime(epoch?: number): string {
   });
 }
 
+/** Clock time for a task header: "10:41 PM", "Yesterday 10:41 PM", or "Aug 12, 10:41 PM". */
+export function formatClockTime(epoch?: number): string {
+  if (!epoch) return "—";
+  const d = new Date(epoch * 1000);
+  const now = new Date();
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  if (sameCalendarDay(d, now)) return time;
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (sameCalendarDay(d, yesterday)) return `Yesterday ${time}`;
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function sameCalendarDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
 export function statusLabel(status?: string): string {
   switch ((status || "").toLowerCase()) {
     case "running":
