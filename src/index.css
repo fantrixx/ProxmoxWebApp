@@ -124,6 +124,12 @@ body {
   background: transparent;
 }
 
+/* The persistent login form lives outside #root and must stay fully hidden
+   on signed-in pages so password managers do not treat it as a fill target. */
+form#login[hidden] {
+  display: none !important;
+}
+
 /* Keep autofilled login fields readable on the dark theme (Safari/Chrome/1Password). */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
