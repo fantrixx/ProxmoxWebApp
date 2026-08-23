@@ -1,10 +1,17 @@
-import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Cpu } from "lucide-react";
 import { ApiError, authApi } from "../api";
 import { AppVersionLabel } from "../components/AppVersion";
 import { UpdateBanner } from "../components/UpdateBanner";
+import {
+  adoptNativeLoginForm,
+  getNativeLoginForm,
+  releaseNativeLoginForm,
+  setNativeLoginPending,
+} from "../nativeLoginForm";
 import { markVisit } from "../visit";
 
 const LOGIN_PREFS_KEY = "proxpanel.login";
@@ -39,12 +46,25 @@ function saveLoginPrefs(prefs: LoginPrefs) {
 const fieldClass =
   "w-full rounded-xl border border-line bg-bg px-3 py-3 text-base outline-none focus:border-accent md:text-sm";
 
+const ignorePwMgr = {
+  autoComplete: "off" as const,
+  "data-1p-ignore": true,
+  "data-lpignore": "true",
+  "data-form-type": "other",
+};
+
 export default function Login() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const saved = loadLoginPrefs();
-  const usernameRef = useRef<HTMLInputElement>(null);
-  const passwordRef = useRef<HTMLInputElement>(null);
+  const usernameRef = useRef<HTMLInputElement | null>(null);
+  const passwordRef = useRef<HTMLInputElement | null>(null);
+  const slotRef = useRef<HTMLDivElement>(null);
+  const nativeFormRef = useRef<HTMLFormElement | null>(null);
+  const hostRef = useRef(saved?.host ?? "");
+  const realmRef = useRef(saved?.realm ?? "pam");
+  const checkCertRef = useRef(saved?.checkCert ?? false);
+  const loginRef = useRef<(useEnvToken?: boolean) => Promise<void>>(async () => {});
 
   const [host, setHost] = useState(saved?.host ?? "");
   const [realm, setRealm] = useState(saved?.realm ?? "pam");
@@ -53,6 +73,42 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [connectionOpen, setConnectionOpen] = useState(() => !saved?.host);
+  const [usingNativeForm] = useState(() => !!getNativeLoginForm());
+  const [statusSlot, setStatusSlot] = useState<HTMLElement | null>(null);
+
+  hostRef.current = host;
+  realmRef.current = realm;
+  checkCertRef.current = checkCert;
+
+  useLayoutEffect(() => {
+    const slot = slotRef.current;
+    if (!slot) return;
+
+    const form = adoptNativeLoginForm(slot, saved?.username ?? "");
+    if (!form) return;
+
+    nativeFormRef.current = form;
+    usernameRef.current = form.querySelector<HTMLInputElement>("#username");
+    passwordRef.current = form.querySelector<HTMLInputElement>("#password");
+    setStatusSlot(form.querySelector<HTMLElement>("#login-status"));
+
+    const onSubmit = (ev: Event) => {
+      ev.preventDefault();
+      void loginRef.current(false);
+    };
+    form.addEventListener("submit", onSubmit);
+
+    return () => {
+      form.removeEventListener("submit", onSubmit);
+      nativeFormRef.current = null;
+      releaseNativeLoginForm();
+    };
+  }, [saved?.username]);
+
+  useEffect(() => {
+    const form = nativeFormRef.current;
+    if (form) setNativeLoginPending(form, pending);
+  }, [pending]);
 
   useEffect(() => {
     void authApi
@@ -74,26 +130,26 @@ export default function Login() {
   }, [navigate]);
 
   function readCredentials() {
+    const form = nativeFormRef.current ?? usernameRef.current?.form ?? null;
+    if (form) {
+      const fd = new FormData(form);
+      return {
+        username: String(fd.get("username") ?? "").trim(),
+        password: String(fd.get("password") ?? ""),
+      };
+    }
     return {
       username: usernameRef.current?.value.trim() ?? "",
       password: passwordRef.current?.value ?? "",
     };
   }
 
-  async function submit(ev: FormEvent | MouseEvent, useEnvToken = false) {
-    ev.preventDefault();
-    const form =
-      "currentTarget" in ev && ev.currentTarget instanceof HTMLFormElement
-        ? ev.currentTarget
-        : usernameRef.current?.form ?? null;
-    const fd = form ? new FormData(form) : null;
-    const username = (
-      fd ? String(fd.get("username") ?? "") : readCredentials().username
-    ).trim();
-    const password = fd
-      ? String(fd.get("password") ?? "")
-      : readCredentials().password;
-    if (!useEnvToken && (!host.trim() || !username || !password)) {
+  async function login(useEnvToken = false) {
+    const { username, password } = readCredentials();
+    const hostValue = hostRef.current;
+    const realmValue = realmRef.current;
+    const checkCertValue = checkCertRef.current;
+    if (!useEnvToken && (!hostValue.trim() || !username || !password)) {
       setError("Server, username, and password are required.");
       return;
     }
@@ -101,30 +157,47 @@ export default function Login() {
     setError(null);
     try {
       const user = await authApi.login({
-        host,
+        host: hostValue,
         username,
         password,
-        realm,
-        rejectUnauthorized: checkCert,
+        realm: realmValue,
+        rejectUnauthorized: checkCertValue,
         useEnvToken,
       });
-      saveLoginPrefs({ host, username, realm, checkCert });
+      saveLoginPrefs({
+        host: hostValue,
+        username,
+        realm: realmValue,
+        checkCert: checkCertValue,
+      });
       markVisit(true);
       qc.setQueryData(["me"], user);
       navigate("/", { replace: true });
     } catch (err) {
       setError(
-        err instanceof ApiError || err instanceof Error
-          ? err.message
-          : "Sign-in failed",
+        err instanceof ApiError || err instanceof Error ? err.message : "Sign-in failed",
       );
     } finally {
       setPending(false);
     }
   }
 
+  loginRef.current = login;
+
+  async function submit(ev: FormEvent | MouseEvent, useEnvToken = false) {
+    ev.preventDefault();
+    await login(useEnvToken);
+  }
+
+  const errorBox = error ? (
+    <p className="mb-4 rounded-xl border border-bad/30 bg-bad/10 px-3 py-2 text-sm text-bad">
+      {error}
+    </p>
+  ) : null;
+
   return (
     <div className="bg-grid min-h-dvh">
+      {usingNativeForm && statusSlot ? createPortal(errorBox, statusSlot) : null}
       <div className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4 py-8 sm:px-6">
         <div className="mb-8 flex items-center gap-3">
           <div className="grid size-12 place-items-center rounded-2xl bg-accent text-black">
@@ -140,124 +213,71 @@ export default function Login() {
 
         <UpdateBanner className="mb-4" />
 
-        <form
-          method="post"
-          action="/login"
-          autoComplete="on"
-          onSubmit={(e) => void submit(e, false)}
-          className="rounded-2xl border border-line bg-surface/90 p-6 shadow-2xl backdrop-blur"
-        >
-          <div className="mb-4">
-            <label htmlFor="username" className="mb-1.5 block text-xs text-muted">
-              Username
-            </label>
-            <input
-              ref={usernameRef}
-              id="username"
-              name="username"
-              type="text"
-              defaultValue={saved?.username ?? ""}
-              placeholder="root"
-              className={fieldClass}
-              autoComplete="username"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              required
-            />
-          </div>
-
-          <div className="mb-5">
-            <label htmlFor="password" className="mb-1.5 block text-xs text-muted">
-              Password
-            </label>
-            <input
-              ref={passwordRef}
-              id="password"
-              name="password"
-              type="password"
-              className={`${fieldClass} pr-12`}
-              autoComplete="current-password"
-              autoCapitalize="off"
-              autoCorrect="off"
-              spellCheck={false}
-              required
-            />
-          </div>
-
-          <details
-            className="mb-5 border-t border-line pt-4"
-            open={connectionOpen}
-            onToggle={(e) => setConnectionOpen(e.currentTarget.open)}
-          >
-            <summary className="cursor-pointer text-xs text-muted">
-              Connection{host ? ` · ${host}` : ""}
-            </summary>
-            <div className="mt-3">
-              <label htmlFor="proxpanel-server" className="mb-1.5 block text-xs text-muted">
-                Proxmox server
-              </label>
-              <input
-                id="proxpanel-server"
-                name="proxpanel-server"
-                type="text"
-                inputMode="url"
-                value={host}
-                onChange={(e) => setHost(e.target.value)}
-                placeholder="https://192.168.1.10:8006"
-                className={fieldClass}
-                autoComplete="off"
-                data-1p-ignore
-                data-lpignore="true"
-                data-form-type="other"
-              />
-            </div>
-            <div className="mt-4">
-              <label htmlFor="proxpanel-realm" className="mb-1.5 block text-xs text-muted">
-                Realm
-              </label>
-              <select
-                id="proxpanel-realm"
-                name="proxpanel-realm"
-                value={realm}
-                onChange={(e) => setRealm(e.target.value)}
-                className={fieldClass}
-                autoComplete="off"
-                data-1p-ignore
-                data-lpignore="true"
+        <div className="rounded-2xl border border-line bg-surface/90 p-6 shadow-2xl backdrop-blur">
+          {/*
+            Username + password must be the only fillable fields in the login
+            form. Extra inputs (server URL, realm) in the same <form> make iOS
+            Safari / 1Password treat the page as a generic form and skip AutoFill.
+            data-1p-ignore is ignored by Apple's iOS AutoFill (which 1Password uses).
+          */}
+          {usingNativeForm ? (
+            <div ref={slotRef} />
+          ) : (
+            <form
+              id="login"
+              name="login"
+              method="post"
+              action="/login"
+              autoComplete="on"
+              data-form-type="login"
+              onSubmit={(e) => void submit(e, false)}
+            >
+              <div className="mb-4">
+                <label htmlFor="username" className="mb-1.5 block text-xs text-muted">
+                  Username
+                </label>
+                <input
+                  ref={usernameRef}
+                  id="username"
+                  name="username"
+                  type="text"
+                  defaultValue={saved?.username ?? ""}
+                  placeholder="root"
+                  className={fieldClass}
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  required
+                />
+              </div>
+              <div className="mb-5">
+                <label htmlFor="password" className="mb-1.5 block text-xs text-muted">
+                  Password
+                </label>
+                <input
+                  ref={passwordRef}
+                  id="password"
+                  name="password"
+                  type="password"
+                  className={fieldClass}
+                  autoComplete="current-password"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  required
+                />
+              </div>
+              {errorBox}
+              <button
+                type="submit"
+                disabled={pending}
+                className="min-h-12 w-full rounded-xl bg-accent py-3 text-sm font-semibold text-black hover:bg-accent-2 disabled:opacity-50"
               >
-                <option value="pam">pam (Linux)</option>
-                <option value="pve">pve</option>
-              </select>
-            </div>
-            <label className="mt-4 flex items-center gap-2 text-sm text-muted">
-              <input
-                type="checkbox"
-                name="proxpanel-check-cert"
-                checked={checkCert}
-                onChange={(e) => setCheckCert(e.target.checked)}
-                className="accent-accent"
-                autoComplete="off"
-                data-1p-ignore
-                data-lpignore="true"
-              />
-              Verify TLS certificate
-            </label>
-          </details>
-
-          {error ? (
-            <p className="mb-4 rounded-xl border border-bad/30 bg-bad/10 px-3 py-2 text-sm text-bad">
-              {error}
-            </p>
-          ) : null}
-
-          <button
-            type="submit"
-            disabled={pending}
-            className="min-h-12 w-full rounded-xl bg-accent py-3 text-sm font-semibold text-black hover:bg-accent-2 disabled:opacity-50"
-          >
-            {pending ? "Connecting…" : "Sign in"}
-          </button>
+                {pending ? "Connecting…" : "Sign in"}
+              </button>
+            </form>
+          )}
 
           {hasToken ? (
             <button
@@ -269,7 +289,78 @@ export default function Login() {
               Connect with API token from .env
             </button>
           ) : null}
-        </form>
+
+          {!window.isSecureContext ? (
+            <p className="mt-4 text-center text-xs leading-relaxed text-muted">
+              Password autofill (1Password, Safari) usually needs{" "}
+              <span className="font-mono">https://</span>. On{" "}
+              <span className="font-mono">http://</span>, tap the password field,
+              then choose Passwords / 1Password above the keyboard.
+            </p>
+          ) : null}
+
+          <form
+            id="login-connection"
+            name="login-connection"
+            autoComplete="off"
+            data-1p-ignore
+            data-form-type="other"
+            className="mt-5 border-t border-line pt-4"
+            onSubmit={(e) => e.preventDefault()}
+          >
+            <details
+              open={connectionOpen}
+              onToggle={(e) => setConnectionOpen(e.currentTarget.open)}
+            >
+              <summary className="cursor-pointer text-xs text-muted">
+                Connection{host ? ` · ${host}` : ""}
+              </summary>
+              <div className="mt-3">
+                <label htmlFor="proxpanel-server" className="mb-1.5 block text-xs text-muted">
+                  Proxmox server
+                </label>
+                <input
+                  id="proxpanel-server"
+                  name="proxpanel-server"
+                  type="text"
+                  inputMode="url"
+                  value={host}
+                  onChange={(e) => setHost(e.target.value)}
+                  placeholder="https://192.168.1.10:8006"
+                  className={fieldClass}
+                  {...ignorePwMgr}
+                />
+              </div>
+              <div className="mt-4">
+                <label htmlFor="proxpanel-realm" className="mb-1.5 block text-xs text-muted">
+                  Realm
+                </label>
+                <select
+                  id="proxpanel-realm"
+                  name="proxpanel-realm"
+                  value={realm}
+                  onChange={(e) => setRealm(e.target.value)}
+                  className={fieldClass}
+                  {...ignorePwMgr}
+                >
+                  <option value="pam">pam (Linux)</option>
+                  <option value="pve">pve</option>
+                </select>
+              </div>
+              <label className="mt-4 flex items-center gap-2 text-sm text-muted">
+                <input
+                  type="checkbox"
+                  name="proxpanel-check-cert"
+                  checked={checkCert}
+                  onChange={(e) => setCheckCert(e.target.checked)}
+                  className="accent-accent"
+                  {...ignorePwMgr}
+                />
+                Verify TLS certificate
+              </label>
+            </details>
+          </form>
+        </div>
 
         <p className="mt-6 text-center text-xs text-muted">
           Server, username, and realm are saved in this browser. The password is not.
